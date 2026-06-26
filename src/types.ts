@@ -3,6 +3,7 @@ export interface Vehicle {
   name: string;
   manualKM: number;
   themeColor?: string;
+  photoUrl?: string;
 }
 
 export interface RecordItem {

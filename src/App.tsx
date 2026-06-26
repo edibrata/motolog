@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Wrench, RefreshCw, Grid, Plus, Edit2, Trash2, X, ChevronDown, Search, ArrowUp, Paperclip 
+  Wrench, RefreshCw, Grid, Plus, Edit2, Trash2, X, ChevronDown, Search, ArrowUp, Paperclip, Camera, AlertTriangle
 } from 'lucide-react';
 import { Vehicle, ServiceRecord, ToastMessage, RecordItem } from './types';
 import { 
@@ -10,8 +10,11 @@ import {
 import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './lib/firebase';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useSwipeable } from 'react-swipeable';
+import { motion, AnimatePresence } from 'motion/react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const THEMES = [
   'indigo',
@@ -79,6 +82,16 @@ export default function App() {
 
   const TABS = ['home', 'analysis', 'history'] as const;
   const [currentMainTab, setCurrentMainTab] = useState<typeof TABS[number]>('home');
+  const [tabDirection, setTabDirection] = useState(0);
+
+  const handleTabChange = (newTab: typeof TABS[number]) => {
+    if (newTab === currentMainTab) return;
+    const currentIndex = TABS.indexOf(currentMainTab);
+    const newIndex = TABS.indexOf(newTab);
+    setTabDirection(newIndex > currentIndex ? 1 : -1);
+    setCurrentMainTab(newTab);
+  };
+
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historyMonthFilter, setHistoryMonthFilter] = useState('');
   const [historyPriceFilter, setHistoryPriceFilter] = useState('');
@@ -86,11 +99,11 @@ export default function App() {
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
       const idx = TABS.indexOf(currentMainTab);
-      if (idx < TABS.length - 1) setCurrentMainTab(TABS[idx + 1]);
+      if (idx < TABS.length - 1) handleTabChange(TABS[idx + 1]);
     },
     onSwipedRight: () => {
       const idx = TABS.indexOf(currentMainTab);
-      if (idx > 0) setCurrentMainTab(TABS[idx - 1]);
+      if (idx > 0) handleTabChange(TABS[idx - 1]);
     },
     trackMouse: true
   });
@@ -142,6 +155,10 @@ export default function App() {
 
   const [newVehicleName, setNewVehicleName] = useState('');
   const [editVehicleId, setEditVehicleId] = useState('');
+  const [vehiclePhotoFile, setVehiclePhotoFile] = useState<File | null>(null);
+  const [vehiclePhotoPreview, setVehiclePhotoPreview] = useState<string | null>(null);
+  const [isVehicleUploading, setIsVehicleUploading] = useState(false);
+  const vehiclePhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -234,6 +251,25 @@ export default function App() {
     return vehicleRecords.reduce((max, r) => (r.odometer > max.odometer ? r : max), vehicleRecords[0]);
   }, [vehicleRecords]);
 
+  const componentsNeedingService = useMemo(() => {
+    if (!activeVehicle) return [];
+    const currentKM = activeVehicle.manualKM || 0;
+    return INTEL_CONFIG.filter(cfg => {
+        const matches = vehicleRecords.filter(r => 
+          r.items.some(item => cfg.kws.some(kw => item.name.toLowerCase().includes(kw)))
+        );
+        const lastRec = matches.length ? matches[0] : null;
+        const lastKM = lastRec ? lastRec.odometer : 0;
+        let progress = 0;
+        if (lastRec) {
+            progress = ((currentKM - lastKM) / cfg.interval) * 100;
+        } else if (currentKM > 0) {
+            progress = (currentKM / cfg.interval) * 100;
+        }
+        return progress >= 100;
+    });
+  }, [activeVehicle, vehicleRecords]);
+
   const filteredRecords = vehicleRecords.filter(record => {
     let match = true;
     if (historySearchQuery) {
@@ -261,6 +297,17 @@ export default function App() {
        monthly[monthYear] += r.totalCost;
     });
     return Object.entries(monthly).reverse().map(([name, cost]) => ({ name, cost }));
+  }, [vehicleRecords]);
+
+  const odometerData = useMemo(() => {
+    const chronos = [...vehicleRecords].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return chronos.map(r => {
+        const d = new Date(r.date);
+        return {
+            date: `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })} '${d.getFullYear().toString().substring(2)}`,
+            km: r.odometer
+        };
+    });
   }, [vehicleRecords]);
 
   const dailyAverageKM = useMemo(() => {
@@ -391,22 +438,227 @@ export default function App() {
     });
   };
 
-  const handleAddVehicle = () => {
+  const downloadPDFReport = () => {
+    if (!activeVehicle || vehicleRecords.length === 0) {
+      showToast("Tidak ada riwayat untuk diunduh");
+      return;
+    }
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    
+    // Add Title
+    doc.setFontSize(18);
+    doc.text(`Laporan Riwayat Servis ${activeVehicle.name}`, pageWidth / 2, 22, { align: 'center' });
+    
+    // Add Subtitle
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Diekspor pada ${new Date().toLocaleString('id-ID')}`, pageWidth / 2, 30, { align: 'center' });
+    
+    // Prepare table data
+    const tableBody: any[] = [];
+    vehicleRecords.forEach((record, recordIndex) => {
+      const parts = record.items;
+      const fillColor = recordIndex % 2 === 0 ? [255, 255, 255] : [247, 248, 250];
+      
+      if (parts.length === 0) {
+        tableBody.push([
+          { content: (recordIndex + 1).toString(), styles: { fillColor, cellPadding: 3, halign: 'center' } },
+          { content: new Date(record.date).toLocaleDateString('id-ID'), styles: { fillColor, cellPadding: 3 } },
+          { content: `${formatCurrency(record.odometer)} KM`, styles: { fillColor, cellPadding: 3 } },
+          { content: record.workshop || '-', styles: { fillColor, cellPadding: 3 } },
+          { content: '-', styles: { fillColor, cellPadding: { left: 2, right: 1, top: 3, bottom: 3 }, halign: 'center' } },
+          { content: '-', styles: { fillColor, cellPadding: { left: 1, right: 2, top: 3, bottom: 3 } } },
+          { content: `Rp ${formatCurrency(record.totalCost)}`, styles: { fillColor, cellPadding: 3 } }
+        ]);
+      } else {
+        parts.forEach((item, index) => {
+          const isFirst = index === 0;
+          const isLast = index === parts.length - 1;
+          const topPad = isFirst ? 3 : 0.5;
+          const bottomPad = isLast ? 3 : 0.5;
+
+          const bulletStyle = { fillColor, cellPadding: { left: 2, right: 1, top: topPad, bottom: bottomPad }, halign: 'right' };
+          const textStyle = { fillColor, cellPadding: { left: 1, right: 2, top: topPad, bottom: bottomPad } };
+
+          const rowData = isFirst ? [
+            { content: (recordIndex + 1).toString(), rowSpan: parts.length, styles: { fillColor, cellPadding: 3, halign: 'center' } },
+            { content: new Date(record.date).toLocaleDateString('id-ID'), rowSpan: parts.length, styles: { fillColor, cellPadding: 3 } },
+            { content: `${formatCurrency(record.odometer)} KM`, rowSpan: parts.length, styles: { fillColor, cellPadding: 3 } },
+            { content: record.workshop || '-', rowSpan: parts.length, styles: { fillColor, cellPadding: 3 } },
+            { content: `\u2022`, styles: bulletStyle as any },
+            { content: `${item.name} (Rp ${formatCurrency(item.price)})`, styles: textStyle as any },
+            { content: `Rp ${formatCurrency(record.totalCost)}`, rowSpan: parts.length, styles: { fillColor, cellPadding: 3 } }
+          ] : [
+            { content: `\u2022`, styles: bulletStyle as any },
+            { content: `${item.name} (Rp ${formatCurrency(item.price)})`, styles: textStyle as any }
+          ];
+          tableBody.push(rowData);
+        });
+      }
+    });
+
+    const totalPagesExp = '{total_pages_count_string}';
+
+    autoTable(doc, {
+      startY: 40,
+      head: [[
+        'No',
+        'Tanggal', 
+        'Odometer', 
+        'Bengkel', 
+        { content: 'Suku Cadang/Jasa', colSpan: 2 }, 
+        'Total Biaya'
+      ]],
+      body: tableBody,
+      styles: { fontSize: 9, cellPadding: 3, valign: 'top' },
+      headStyles: { fillColor: [40, 40, 40], halign: 'center' },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        1: { cellWidth: 25, halign: 'center' },
+        2: { cellWidth: 25, halign: 'center' },
+        3: { cellWidth: 30, halign: 'center' },
+        4: { cellWidth: 5, halign: 'right' },
+        5: { cellWidth: 'auto' },
+        6: { cellWidth: 30, halign: 'right' }
+      },
+      didDrawPage: (data) => {
+        const pageSize = doc.internal.pageSize;
+        const pageWidth = pageSize.width ? pageSize.width : pageSize.getWidth();
+        const pageHeight = pageSize.height ? pageSize.height : pageSize.getHeight();
+        
+        doc.setFontSize(9);
+        
+        const str1 = "Hal. ";
+        const str2 = `${data.pageNumber}`;
+        const str3 = " dari ";
+        const str4 = totalPagesExp;
+        
+        doc.setFont("helvetica", "normal");
+        const w1 = doc.getTextWidth(str1);
+        doc.setFont("helvetica", "bold");
+        const w2 = doc.getTextWidth(str2);
+        doc.setFont("helvetica", "normal");
+        const w3 = doc.getTextWidth(str3);
+        doc.setFont("helvetica", "bold");
+        const w4 = doc.getTextWidth("99"); 
+        
+        const totalWidth = w1 + w2 + w3 + w4;
+        let startX = (pageWidth - totalWidth) / 2;
+        const startY = pageHeight - 10;
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(str1, startX, startY);
+        startX += w1;
+        
+        doc.setFont("helvetica", "bold");
+        doc.text(str2, startX, startY);
+        startX += w2;
+        
+        doc.setFont("helvetica", "normal");
+        doc.text(str3, startX, startY);
+        startX += w3;
+        
+        doc.setFont("helvetica", "bold");
+        doc.text(str4, startX, startY);
+      }
+    });
+
+    if (typeof doc.putTotalPages === 'function') {
+      doc.putTotalPages(totalPagesExp);
+    }
+    
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const mm = pad(now.getMonth() + 1);
+    const dd = pad(now.getDate());
+    const hh = pad(now.getHours());
+    const min = pad(now.getMinutes());
+    const ss = pad(now.getSeconds());
+    const dateStr = `${yyyy}${mm}${dd} ${hh}.${min}.${ss}`;
+    
+    doc.save(`Riwayat Servis ${activeVehicle.name} ${dateStr}.pdf`);
+    showToast("Laporan PDF berhasil diunduh");
+  };
+
+  const handleAddVehicle = async () => {
     const name = newVehicleName.trim();
     if (!name) return;
     
+    setIsVehicleUploading(true);
+    let uploadedUrl = '';
+    
+    if (vehiclePhotoFile) {
+        try {
+            // Compress and convert to base64 for vehicle icons (avoid Firebase storage issues)
+            uploadedUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 150;
+                        const MAX_HEIGHT = 150;
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > height) {
+                            if (width > MAX_WIDTH) {
+                                height *= MAX_WIDTH / width;
+                                width = MAX_WIDTH;
+                            }
+                        } else {
+                            if (height > MAX_HEIGHT) {
+                                width *= MAX_HEIGHT / height;
+                                height = MAX_HEIGHT;
+                            }
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx?.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    };
+                    img.onerror = () => reject(new Error('Image processing failed'));
+                    img.src = e.target?.result as string;
+                };
+                reader.onerror = () => reject(new Error('File reading failed'));
+                reader.readAsDataURL(vehiclePhotoFile);
+            });
+        } catch (err) {
+            console.error("Upload error:", err);
+            showToast("Gagal memproses foto");
+        }
+    }
+
     if (editVehicleId) {
-      setVehicles(prev => prev.map(v => v.id === editVehicleId ? { ...v, name } : v));
+      setVehicles(prev => prev.map(v => {
+          if (v.id === editVehicleId) {
+              const updated = { ...v, name };
+              if (uploadedUrl) {
+                  updated.photoUrl = uploadedUrl;
+              } else if (!vehiclePhotoPreview) {
+                  delete updated.photoUrl;
+              }
+              return updated;
+          }
+          return v;
+      }));
       setEditVehicleId('');
     } else {
       const usedThemes = vehicles.map(v => v.themeColor);
       const availableThemes = THEMES.filter(t => !usedThemes.includes(t));
       const nextTheme = availableThemes.length > 0 ? availableThemes[Math.floor(Math.random() * availableThemes.length)] : THEMES[Math.floor(Math.random() * THEMES.length)];
-      const newVeh = { id: 'veh_' + Date.now(), name, manualKM: 0, themeColor: nextTheme };
+      const newVeh = { id: 'veh_' + Date.now(), name, manualKM: 0, themeColor: nextTheme, photoUrl: uploadedUrl };
       setVehicles(prev => [...prev, newVeh]);
       setCurrentVehicleId(newVeh.id);
     }
     setNewVehicleName('');
+    setVehiclePhotoFile(null);
+    setVehiclePhotoPreview(null);
+    if (vehiclePhotoInputRef.current) vehiclePhotoInputRef.current.value = '';
+    setIsVehicleUploading(false);
   };
 
   const handleDeleteVehicle = (id: string) => {
@@ -621,7 +873,8 @@ export default function App() {
         {/* Vehicle Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-4 mb-4 custom-scroll no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
           {vehicles.map(v => (
-            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
+            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 flex items-center gap-2 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
+              {v.photoUrl && <img src={v.photoUrl} alt={v.name} className="w-6 h-6 rounded-full object-cover border border-white/20 shadow-sm" />}
               {v.name}
             </button>
           ))}
@@ -629,14 +882,37 @@ export default function App() {
 
         {/* Main Tabs */}
         <div className="bg-slate-200/50 p-1.5 rounded-3xl flex gap-1 mb-6 shadow-inner border border-slate-200 relative">
-            <button onClick={() => setCurrentMainTab('home')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
-            <button onClick={() => setCurrentMainTab('analysis')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
-            <button onClick={() => setCurrentMainTab('history')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
+            <button onClick={() => handleTabChange('home')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
+            <button onClick={() => handleTabChange('analysis')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
+            <button onClick={() => handleTabChange('history')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
         </div>
 
         {/* Home Section */}
-        {currentMainTab === 'home' && (
-          <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="relative overflow-hidden w-full min-h-[500px]">
+          <AnimatePresence mode="wait" initial={false}>
+            {currentMainTab === 'home' && (
+              <motion.section
+                key="home"
+                initial={{ opacity: 0, x: tabDirection > 0 ? 30 : -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDirection > 0 ? -30 : 30 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="space-y-6"
+              >
+              {componentsNeedingService.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 p-4 rounded-[20px] flex items-start gap-4 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                      <div className="bg-red-100 p-2.5 rounded-xl text-red-600 shadow-sm border border-red-200">
+                          <AlertTriangle size={20} strokeWidth={2.5} />
+                      </div>
+                      <div className="flex-1 mt-0.5">
+                          <h4 className="text-sm font-black text-red-800 tracking-tight mb-1">Perhatian: Waktunya Servis!</h4>
+                          <p className="text-xs font-medium text-red-700/90 leading-relaxed mb-3">
+                              {componentsNeedingService.length} komponen telah mencapai batas interval dan perlu segera diperiksa: <span className="font-bold">{componentsNeedingService.map(c => c.name).join(', ')}</span>.
+                          </p>
+                          <button onClick={() => handleTabChange('analysis')} className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95">Lihat Detail Analisis</button>
+                      </div>
+                  </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-slate-200/60 pb-6 mb-6">
                   <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 relative group transition-all duration-300 hover:shadow-md hover:border-slate-300">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none transition-colors">Odometer Saat Ini</p>
@@ -666,19 +942,26 @@ export default function App() {
                               <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Aksi Cepat</p>
                               <p className="text-sm font-bold tracking-wide">Catat Servis</p>
                           </button>
-                          <button onClick={() => setCurrentMainTab('analysis')} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
+                          <button onClick={() => handleTabChange('analysis')} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
                               <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Cek Mesin</p>
                               <p className="text-sm font-bold tracking-wide">Lihat Analisa</p>
                           </button>
                       </div>
                   </div>
               </div>
-          </section>
-        )}
+              </motion.section>
+            )}
 
-        {/* Analysis Section */}
-        {currentMainTab === 'analysis' && (
-          <section className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* Analysis Section */}
+            {currentMainTab === 'analysis' && (
+              <motion.section
+                key="analysis"
+                initial={{ opacity: 0, x: tabDirection > 0 ? 30 : -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDirection > 0 ? -30 : 30 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="space-y-5"
+              >
               {expenseData.length > 0 && (
                 <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6">
                   <h2 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Grafik Pengeluaran</h2>
@@ -703,6 +986,35 @@ export default function App() {
                         />
                         <Bar dataKey="cost" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={40} />
                       </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {odometerData.length > 1 && (
+                <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6">
+                  <h2 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Tren Odometer</h2>
+                  <div className="h-44 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={odometerData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748b' }} dy={10} />
+                        <YAxis domain={['auto', 'auto']} hide />
+                        <Tooltip 
+                          cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-lg">
+                                  {formatCurrency(payload[0].value as number)} KM
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Line type="monotone" dataKey="km" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4, fill: '#0ea5e9', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
@@ -774,16 +1086,26 @@ export default function App() {
                     );
                   })}
               </div>
-          </section>
-        )}
+              </motion.section>
+            )}
 
-        {/* History Section */}
-        {currentMainTab === 'history' && (
-          <section className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* History Section */}
+            {currentMainTab === 'history' && (
+              <motion.section
+                key="history"
+                initial={{ opacity: 0, x: tabDirection > 0 ? 30 : -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: tabDirection > 0 ? -30 : 30 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="space-y-5"
+              >
               <div className="flex flex-col gap-5 mb-2">
                   <div className="flex items-center justify-between px-1">
                       <h2 className="font-black text-slate-900 text-2xl tracking-tight">Catatan <span className={`${theme.text}`}>{activeVehicle?.name}</span></h2>
-                      <button onClick={handleClearHistory} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Kosongkan</button>
+                      <div className="flex items-center gap-4">
+                          <button onClick={downloadPDFReport} className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Unduh PDF</button>
+                          <button onClick={handleClearHistory} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Kosongkan</button>
+                      </div>
                   </div>
                   
                   <div className="flex flex-col gap-3">
@@ -830,8 +1152,10 @@ export default function App() {
                   ))
                 )}
               </div>
-          </section>
-        )}
+              </motion.section>
+            )}
+          </AnimatePresence>
+        </div>
 
       </div>
 
@@ -950,17 +1274,49 @@ export default function App() {
             <div className="p-6 space-y-6">
                 <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Tambah / Edit Kendaraan</label>
-                    <div className="flex gap-2">
-                        <input type="text" value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} placeholder="Nama Kendaraan" className={`flex-1 px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 ${theme.ringFocus} outline-none transition-all duration-300`} />
-                        <button onClick={handleAddVehicle} className="bg-slate-800 hover:bg-slate-900 text-white px-6 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-all duration-300">{editVehicleId ? 'Update' : 'Simpan'}</button>
+                    <div className="flex flex-col gap-3">
+                        <div className="flex gap-2">
+                            <input type="text" value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} placeholder="Nama Kendaraan" className={`flex-1 px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 ${theme.ringFocus} outline-none transition-all duration-300`} />
+                            <button onClick={handleAddVehicle} disabled={isVehicleUploading} className="bg-slate-800 hover:bg-slate-900 disabled:opacity-70 text-white px-6 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-all duration-300">
+                                {isVehicleUploading ? <RefreshCw className="w-5 h-5 animate-spin" /> : editVehicleId ? 'Update' : 'Simpan'}
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button type="button" onClick={() => vehiclePhotoInputRef.current?.click()} className={`flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all ${theme.borderFocus}`}>
+                                <Camera size={18} />
+                                {vehiclePhotoFile ? 'Ganti Foto' : 'Pilih Foto (Opsional)'}
+                            </button>
+                            {vehiclePhotoPreview && (
+                                <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
+                                    <img src={vehiclePhotoPreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <button type="button" onClick={() => { setVehiclePhotoFile(null); setVehiclePhotoPreview(null); if(vehiclePhotoInputRef.current) vehiclePhotoInputRef.current.value = ''; }} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"><X size={12}/></button>
+                                </div>
+                            )}
+                            <input type="file" accept="image/*" ref={vehiclePhotoInputRef} className="hidden" onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    setVehiclePhotoFile(file);
+                                    setVehiclePhotoPreview(URL.createObjectURL(file));
+                                }
+                            }} />
+                        </div>
                     </div>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scroll p-1 -m-1">
                   {vehicles.map(v => (
                      <div key={v.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm rounded-2xl transition-all duration-300">
-                        <span className="text-sm font-bold text-slate-800">{v.name}</span>
+                        <div className="flex items-center gap-3">
+                            {v.photoUrl ? (
+                                <img src={v.photoUrl} alt={v.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                            ) : (
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${getThemeClasses(v.themeColor).bgBase}`}>
+                                    {v.name.substring(0, 2).toUpperCase()}
+                                </div>
+                            )}
+                            <span className="text-sm font-bold text-slate-800">{v.name}</span>
+                        </div>
                         <div className="flex gap-1.5">
-                            <button onClick={() => { setEditVehicleId(v.id); setNewVehicleName(v.name); }} className={`text-slate-500 p-2 hover:${theme.bgLight} hover:${theme.text} border border-transparent hover:${theme.border} rounded-xl transition-all`}><Edit2 size={16} strokeWidth={2.5} /></button>
+                            <button onClick={() => { setEditVehicleId(v.id); setNewVehicleName(v.name); setVehiclePhotoPreview(v.photoUrl || null); setVehiclePhotoFile(null); }} className={`text-slate-500 p-2 hover:${theme.bgLight} hover:${theme.text} border border-transparent hover:${theme.border} rounded-xl transition-all`}><Edit2 size={16} strokeWidth={2.5} /></button>
                             <button onClick={() => handleDeleteVehicle(v.id)} className="text-slate-500 p-2 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-100 rounded-xl transition-all"><Trash2 size={16} strokeWidth={2.5} /></button>
                         </div>
                     </div>
