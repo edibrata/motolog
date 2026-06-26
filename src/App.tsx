@@ -934,68 +934,68 @@ export default function App() {
     const [isOpen, setIsOpen] = useState(false);
     
     return (
-      <div className={`bg-white rounded-[24px] shadow-sm border border-slate-200 overflow-hidden transition-all duration-500 hover:shadow-md hover:border-slate-300 ${isOpen ? `ring-2 ${theme.ringFocus} shadow-md` : ''}`}>
-        <div onClick={() => setIsOpen(!isOpen)} className="p-5 flex items-center justify-between cursor-pointer transition-colors hover:bg-slate-50">
-            <div className="flex items-center gap-4 flex-1">
-                <div className="min-w-0 flex-1 pl-1">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{formatDate(record.date)}</p>
+      <div className={`bg-white rounded-2xl sm:rounded-[24px] shadow-sm border border-slate-200 overflow-hidden transition-all duration-500 hover:shadow-md hover:border-slate-300 ${isOpen ? `ring-2 ${theme.ringFocus} shadow-md` : ''}`}>
+        <div onClick={() => setIsOpen(!isOpen)} className="p-3.5 sm:p-5 flex items-center justify-between cursor-pointer transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="min-w-0 flex-1 pl-0.5">
+                    <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest">{formatDate(record.date)}</p>
                     
-                    <div className="flex flex-wrap gap-x-6 gap-y-2 mt-1.5">
-                        <div className="flex flex-col">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Odometer</span>
-                            <span className="text-sm font-black text-slate-800">{formatCurrency(record.odometer)} KM</span>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 sm:mt-1.5">
+                        <div className="flex flex-col min-w-[70px]">
+                            <span className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-0.5">Odometer</span>
+                            <span className="text-xs sm:text-sm font-black text-slate-800 truncate">{formatCurrency(record.odometer)} KM</span>
                         </div>
-                        <div className="flex flex-col">
-                            <span className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Bengkel</span>
-                            <span className={`text-sm font-bold ${theme.text} truncate`}>{record.workshop || 'Bengkel Umum'}</span>
+                        <div className="flex flex-col min-w-[90px] max-w-[120px] sm:max-w-none">
+                            <span className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-0.5">Bengkel</span>
+                            <span className={`text-xs sm:text-sm font-bold ${theme.text} truncate`}>{record.workshop || 'Bengkel Umum'}</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="flex items-center gap-4 ml-4">
+            <div className="flex items-center gap-2 sm:gap-4 ml-2 sm:ml-4 shrink-0">
                 <div className="text-right">
-                    <p className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Total Biaya</p>
-                    <p className={`text-sm font-black ${theme.text}`}>Rp {formatCurrency(record.totalCost)}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-0.5">Total Biaya</p>
+                    <p className={`text-xs sm:text-sm font-black ${theme.text}`}>Rp {formatCurrency(record.totalCost)}</p>
                 </div>
-                <div className={`p-2 rounded-full transition-colors ${isOpen ? `${theme.bgLight} ${theme.text}` : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
-                    <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} strokeWidth={2.5}/>
+                <div className={`p-1.5 sm:p-2 rounded-full transition-colors ${isOpen ? `${theme.bgLight} ${theme.text}` : 'bg-slate-50 text-slate-400'}`}>
+                    <ChevronDown className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} strokeWidth={2.5}/>
                 </div>
             </div>
         </div>
 
         <div className={`grid transition-all duration-300 ease-in-out ${isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
             <div className="overflow-hidden">
-                <div className="px-5 pb-5 pt-1">
-                    <div className="pt-4 border-t border-slate-100 space-y-4">
-                        <div className="bg-slate-50 rounded-2xl px-5 py-3 border border-slate-100">
-                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-3">Rincian Item & Jasa</p>
-                            <div className="space-y-1.5">
+                <div className="px-3.5 pb-3.5 pt-1 sm:px-5 sm:pb-5">
+                    <div className="pt-3 sm:pt-4 border-t border-slate-100 space-y-3 sm:space-y-4">
+                        <div className="bg-slate-50 rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-5 sm:py-3 border border-slate-100">
+                            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Rincian Item & Jasa</p>
+                            <div className="space-y-1">
                                  {record.items.map((i, idx) => {
                                     const highlight = historySearchQuery && i.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ? `${theme.bgLight} ${theme.textLight} rounded px-1 -mx-1` : 'text-slate-700';
                                     return (
-                                    <div key={idx} className="flex justify-between items-center py-1.5 text-xs font-semibold border-b border-slate-200/50 last:border-0 hover:bg-slate-100 transition-colors px-2 -mx-2 rounded">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest ${i.type === 'jasa' ? `${theme.bgLight} ${theme.text}` : 'bg-slate-200 text-slate-500'}`}>{i.type || 'PART'}</span>
-                                            <span className={highlight}>{i.name}</span>
+                                    <div key={idx} className="flex justify-between items-center py-1 text-xs font-semibold border-b border-slate-200/50 last:border-0 hover:bg-slate-100 transition-colors px-1.5 -mx-1.5 rounded">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={`text-[7px] px-1 py-0.5 rounded uppercase font-bold tracking-widest shrink-0 ${i.type === 'jasa' ? `${theme.bgLight} ${theme.text}` : 'bg-slate-200 text-slate-500'}`}>{i.type || 'PART'}</span>
+                                            <span className={`truncate ${highlight}`}>{i.name}</span>
                                         </div>
-                                        <span className="text-slate-500 font-mono text-[10px] pl-4">Rp {formatCurrency(i.price)}</span>
+                                        <span className="text-slate-500 font-mono text-[10px] pl-2 shrink-0">Rp {formatCurrency(i.price)}</span>
                                     </div>
                                     );
                                 })}
                             </div>
                         </div>
                         {record.attachmentUrl && (
-                            <div className="bg-slate-50 rounded-2xl px-5 py-3 border border-slate-100">
-                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Lampiran Bukti (Klik untuk perbesar)</p>
-                                <button type="button" onClick={() => setActiveImagePreview(record.attachmentUrl)} className="block w-full max-h-40 overflow-hidden rounded-xl border border-slate-200 hover:opacity-90 transition-opacity cursor-zoom-in text-left">
+                            <div className="bg-slate-50 rounded-xl sm:rounded-2xl px-3.5 py-2.5 sm:px-5 sm:py-3 border border-slate-100">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Lampiran Bukti (Klik untuk perbesar)</p>
+                                <button type="button" onClick={() => setActiveImagePreview(record.attachmentUrl)} className="block w-full max-h-32 sm:max-h-40 overflow-hidden rounded-lg sm:rounded-xl border border-slate-200 hover:opacity-90 transition-opacity cursor-zoom-in text-left">
                                     <img src={record.attachmentUrl} alt="Bukti Servis" className="w-full object-cover" />
                                 </button>
                             </div>
                         )}
-                        <div className="flex gap-3 mt-1">
-                            <button onClick={() => openEditRecordModal(record.id)} className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-50 active:scale-95 transition-all shadow-sm">Ubah Data</button>
-                            <button onClick={() => handleDeleteRecord(record.id)} className="flex-1 py-3.5 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-100 active:scale-95 transition-all shadow-sm">Hapus</button>
+                        <div className="flex gap-2 sm:gap-3 mt-1">
+                            <button onClick={() => openEditRecordModal(record.id)} className="flex-1 py-2.5 sm:py-3.5 bg-white border border-slate-200 text-slate-700 rounded-lg sm:rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-50 active:scale-95 transition-all shadow-sm">Ubah Data</button>
+                            <button onClick={() => handleDeleteRecord(record.id)} className="flex-1 py-2.5 sm:py-3.5 bg-red-50 border border-red-100 text-red-600 rounded-lg sm:rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-100 active:scale-95 transition-all shadow-sm">Hapus</button>
                         </div>
                     </div>
                 </div>
@@ -1032,9 +1032,9 @@ export default function App() {
           <div className="absolute inset-0 -z-10 cursor-zoom-out" onClick={() => setActiveImagePreview(null)}></div>
       </div>
 
-      <div {...swipeHandlers} className="max-w-md mx-auto px-4 pt-8 md:max-w-4xl relative z-10 w-full overflow-hidden touch-pan-y">
+      <div {...swipeHandlers} className="max-w-md mx-auto px-4 pt-4 sm:pt-8 md:max-w-4xl relative z-10 w-full overflow-hidden touch-pan-y">
         {/* Header */}
-        <header className="flex flex-row items-center justify-between gap-2 mb-8">
+        <header className="flex flex-row items-center justify-between gap-2 mb-5 sm:mb-8">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <div className={`p-2 sm:p-2.5 ${theme.bgBase} text-white rounded-[12px] sm:rounded-[14px] shadow-md shrink-0`}>
                     <Wrench className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.5} />
@@ -1064,20 +1064,20 @@ export default function App() {
         </header>
 
         {/* Vehicle Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-4 mb-4 custom-scroll no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3.5 custom-scroll no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
           {vehicles.map(v => (
-            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 flex items-center gap-2 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
-              {v.photoUrl && <img src={v.photoUrl} alt={v.name} className="w-6 h-6 rounded-full object-cover border border-white/20 shadow-sm" />}
+            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
+              {v.photoUrl && <img src={v.photoUrl} alt={v.name} className="w-5 h-5 rounded-full object-cover border border-white/20 shadow-sm" />}
               {v.name}
             </button>
           ))}
         </div>
 
         {/* Main Tabs */}
-        <div className="bg-slate-200/50 p-1.5 rounded-3xl flex gap-1 mb-6 shadow-inner border border-slate-200 relative">
-            <button onClick={() => handleTabChange('home')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
-            <button onClick={() => handleTabChange('analysis')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
-            <button onClick={() => handleTabChange('history')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
+        <div className="bg-slate-200/50 p-1 rounded-2xl sm:rounded-3xl flex gap-1 mb-4 sm:mb-6 shadow-inner border border-slate-200 relative">
+            <button onClick={() => handleTabChange('home')} className={`flex-1 py-2 sm:py-2.5 px-3 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
+            <button onClick={() => handleTabChange('analysis')} className={`flex-1 py-2 sm:py-2.5 px-3 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
+            <button onClick={() => handleTabChange('history')} className={`flex-1 py-2 sm:py-2.5 px-3 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
         </div>
 
         {/* Home Section */}
@@ -1090,68 +1090,68 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: tabDirection > 0 ? -30 : 30 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className="space-y-6"
+                className="space-y-4 sm:space-y-6"
               >
               {componentsNeedingService.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 p-4 rounded-[20px] flex items-start gap-4 shadow-sm animate-in fade-in zoom-in-95 duration-300">
-                      <div className="bg-red-100 p-2.5 rounded-xl text-red-600 shadow-sm border border-red-200">
-                          <AlertTriangle size={20} strokeWidth={2.5} />
+                  <div className="bg-red-50 border border-red-200 p-3.5 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                      <div className="bg-red-100 p-2 rounded-xl text-red-600 shadow-sm border border-red-200 shrink-0">
+                          <AlertTriangle size={18} strokeWidth={2.5} />
                       </div>
-                      <div className="flex-1 mt-0.5">
-                          <h4 className="text-sm font-black text-red-800 tracking-tight mb-1">Perhatian: Waktunya Servis!</h4>
-                          <p className="text-xs font-medium text-red-700/90 leading-relaxed mb-3">
-                              {componentsNeedingService.length} komponen telah mencapai batas interval dan perlu segera diperiksa: <span className="font-bold">{componentsNeedingService.map(c => c.name).join(', ')}</span>.
+                      <div className="flex-1 mt-0.5 min-w-0">
+                          <h4 className="text-xs sm:text-sm font-black text-red-800 tracking-tight mb-0.5">Perhatian: Waktunya Servis!</h4>
+                          <p className="text-[11px] sm:text-xs font-medium text-red-700/90 leading-relaxed mb-2">
+                              {componentsNeedingService.length} komponen perlu segera diperiksa: <span className="font-bold">{componentsNeedingService.map(c => c.name).join(', ')}</span>.
                           </p>
-                          <button onClick={() => handleTabChange('analysis')} className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95">Lihat Detail Analisis</button>
+                          <button onClick={() => handleTabChange('analysis')} className="text-[10px] sm:text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95">Lihat Detail</button>
                       </div>
                   </div>
               )}
               {componentsApproachingService.length > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-[20px] flex items-start gap-4 shadow-sm animate-in fade-in zoom-in-95 duration-300">
-                      <div className="bg-amber-100 p-2.5 rounded-xl text-amber-600 shadow-sm border border-amber-200">
-                          <Bell size={20} strokeWidth={2.5} />
+                  <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                      <div className="bg-amber-100 p-2 rounded-xl text-amber-600 shadow-sm border border-amber-200 shrink-0">
+                          <Bell size={18} strokeWidth={2.5} />
                       </div>
-                      <div className="flex-1 mt-0.5">
-                          <h4 className="text-sm font-black text-amber-800 tracking-tight mb-1">Pemberitahuan: Mendekati Batas Servis!</h4>
-                          <p className="text-xs font-medium text-amber-700/90 leading-relaxed mb-3">
-                              {componentsApproachingService.length} komponen hampir mencapai batas interval penggantian (dalam {formatCurrency(reminderThreshold)} KM): <span className="font-bold">{componentsApproachingService.map(c => c.name).join(', ')}</span>.
+                      <div className="flex-1 mt-0.5 min-w-0">
+                          <h4 className="text-xs sm:text-sm font-black text-amber-800 tracking-tight mb-0.5">Mendekati Batas Servis!</h4>
+                          <p className="text-[11px] sm:text-xs font-medium text-amber-700/90 leading-relaxed mb-2">
+                              {componentsApproachingService.length} komponen mendekati batas ganti (&lt; {formatCurrency(reminderThreshold)} KM): <span className="font-bold">{componentsApproachingService.map(c => c.name).join(', ')}</span>.
                           </p>
-                          <button onClick={() => handleTabChange('analysis')} className="text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95">Lihat Detail Analisis</button>
+                          <button onClick={() => handleTabChange('analysis')} className="text-[10px] sm:text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg shadow-sm transition-all active:scale-95">Lihat Detail</button>
                       </div>
                   </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-slate-200/60 pb-6 mb-6">
-                  <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 relative group transition-all duration-300 hover:shadow-md hover:border-slate-300">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none transition-colors">Odometer Saat Ini</p>
-                      <h3 className="text-3xl font-black text-slate-800 tracking-tight transition-colors">{formatCurrency(activeVehicle?.manualKM || 0)} <span className="text-sm font-bold text-slate-500 tracking-normal inline-block ml-1">KM</span></h3>
-                      <button onClick={() => { setManualKMInput(activeVehicle?.manualKM?.toString() || '0'); setIsKMModalOpen(true); }} className={`absolute top-4 right-4 p-2.5 bg-slate-50 text-slate-400 rounded-xl lg:opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-slate-100 hover:${theme.text} active:scale-95 border border-slate-200`}>
-                          <Edit2 size={16} strokeWidth={2.5} />
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-4 border-b border-slate-200/60 pb-4 sm:pb-6 mb-4 sm:mb-6">
+                  <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-[24px] shadow-sm border border-slate-200 relative group transition-all duration-300 hover:shadow-md hover:border-slate-300 min-w-0">
+                      <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">Odometer</p>
+                      <h3 className="text-xs sm:text-2xl font-black text-slate-800 tracking-tight transition-colors truncate">{formatCurrency(activeVehicle?.manualKM || 0)} <span className="text-[8px] sm:text-xs font-bold text-slate-400 tracking-normal ml-0.5 inline-block">KM</span></h3>
+                      <button onClick={() => { setManualKMInput(activeVehicle?.manualKM?.toString() || '0'); setIsKMModalOpen(true); }} className="absolute top-1.5 right-1.5 sm:top-4 sm:right-4 p-1 sm:p-2 bg-slate-50 text-slate-400 rounded-lg sm:rounded-xl lg:opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-slate-100 hover:${theme.text} active:scale-95 border border-slate-200/60">
+                          <Edit2 size={10} className="sm:w-4 sm:h-4" strokeWidth={2.5} />
                       </button>
                   </div>
-                  <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none">Servis Terakhir</p>
-                      <h3 className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(latestRecordByOdo ? latestRecordByOdo.odometer : 0)} <span className="text-sm font-bold text-slate-500 tracking-normal inline-block ml-1">KM</span></h3>
+                  <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300 min-w-0">
+                      <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">Terakhir</p>
+                      <h3 className="text-xs sm:text-2xl font-black text-slate-800 tracking-tight truncate">{formatCurrency(latestRecordByOdo ? latestRecordByOdo.odometer : 0)} <span className="text-[8px] sm:text-xs font-bold text-slate-400 tracking-normal ml-0.5 inline-block">KM</span></h3>
                   </div>
-                  <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none">Tanggal Terakhir</p>
-                      <h3 className="text-lg font-bold text-slate-800 mt-2">{latestRecordByOdo ? formatDate(latestRecordByOdo.date) : "-"}</h3>
+                  <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300 min-w-0">
+                      <p className="text-[8px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">Tanggal</p>
+                      <h3 className="text-[9px] sm:text-base font-bold text-slate-700 tracking-tight mt-1 truncate">{latestRecordByOdo ? formatDate(latestRecordByOdo.date).split(' ')[0] + ' ' + formatDate(latestRecordByOdo.date).split(' ')[1] : "-"}</h3>
                   </div>
               </div>
 
-              <div className={`${theme.bgBase} border border-white/10 p-8 rounded-[32px] text-white shadow-xl ${theme.shadowHover} relative overflow-hidden group hover:shadow-2xl transition-all duration-500`}>
+              <div className={`${theme.bgBase} border border-white/10 p-5 sm:p-8 rounded-2xl sm:rounded-[32px] text-white shadow-xl ${theme.shadowHover} relative overflow-hidden group hover:shadow-2xl transition-all duration-500`}>
                   <div className="absolute top-[-30%] right-[-10%] w-[60%] h-[150%] bg-white/10 blur-3xl rounded-full mix-blend-overlay pointer-events-none"></div>
                   <div className="absolute bottom-[-50%] left-[-20%] w-[50%] h-[100%] bg-white/10 blur-2xl rounded-full pointer-events-none"></div>
                   <div className="relative z-10">
-                      <h2 className="text-3xl font-black mb-2 tracking-tight">Halo, <span className="opacity-90">{activeVehicle?.name}</span>.</h2>
-                      <p className="text-sm font-medium text-white/90 leading-relaxed mb-8 max-w-sm">Pantau terus performa kendaraan Anda agar selalu prima di jalanan.</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <button onClick={openAddServiceModal} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
-                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Aksi Cepat</p>
-                              <p className="text-sm font-bold tracking-wide">Catat Servis</p>
+                      <h2 className="text-xl sm:text-3xl font-black mb-1 sm:mb-2 tracking-tight">Halo, <span className="opacity-90">{activeVehicle?.name}</span>.</h2>
+                      <p className="text-xs sm:text-sm font-medium text-white/90 leading-relaxed mb-4 sm:mb-8 max-w-sm">Pantau terus performa kendaraan Anda agar selalu prima di jalanan.</p>
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                          <button onClick={openAddServiceModal} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-3.5 sm:p-5 rounded-xl sm:rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
+                              <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1 text-white/80">Aksi Cepat</p>
+                              <p className="text-xs sm:text-sm font-bold tracking-wide">Catat Servis</p>
                           </button>
-                          <button onClick={() => handleTabChange('analysis')} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
-                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Cek Mesin</p>
-                              <p className="text-sm font-bold tracking-wide">Lihat Analisa</p>
+                          <button onClick={() => handleTabChange('analysis')} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-3.5 sm:p-5 rounded-xl sm:rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
+                              <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1 text-white/80">Cek Mesin</p>
+                              <p className="text-xs sm:text-sm font-bold tracking-wide">Lihat Analisa</p>
                           </button>
                       </div>
                   </div>
