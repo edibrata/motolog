@@ -13,10 +13,52 @@ import { db, storage } from './lib/firebase';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useSwipeable } from 'react-swipeable';
 
+const THEMES = [
+  'indigo',
+  'emerald',
+  'rose',
+  'amber',
+  'cyan',
+  'violet',
+  'fuchsia'
+];
+
+type ThemeClasses = {
+  bgBase: string;
+  bgLight: string;
+  bgHover: string;
+  text: string;
+  textLight: string;
+  border: string;
+  borderFocus: string;
+  ringFocus: string;
+  shadow: string;
+  shadowLg: string;
+  shadowHover: string;
+};
+
+const THEME_MAP: Record<string, ThemeClasses> = {
+  indigo: { bgBase: 'bg-indigo-600', bgLight: 'bg-indigo-50', bgHover: 'hover:bg-indigo-700', text: 'text-indigo-600', textLight: 'text-indigo-700', border: 'border-indigo-100', borderFocus: 'focus:border-indigo-500', ringFocus: 'focus:ring-indigo-50', shadow: 'shadow-indigo-500/50', shadowLg: 'shadow-indigo-600/30', shadowHover: 'shadow-indigo-600/20' },
+  emerald: { bgBase: 'bg-emerald-600', bgLight: 'bg-emerald-50', bgHover: 'hover:bg-emerald-700', text: 'text-emerald-600', textLight: 'text-emerald-700', border: 'border-emerald-100', borderFocus: 'focus:border-emerald-500', ringFocus: 'focus:ring-emerald-50', shadow: 'shadow-emerald-500/50', shadowLg: 'shadow-emerald-600/30', shadowHover: 'shadow-emerald-600/20' },
+  rose: { bgBase: 'bg-rose-600', bgLight: 'bg-rose-50', bgHover: 'hover:bg-rose-700', text: 'text-rose-600', textLight: 'text-rose-700', border: 'border-rose-100', borderFocus: 'focus:border-rose-500', ringFocus: 'focus:ring-rose-50', shadow: 'shadow-rose-500/50', shadowLg: 'shadow-rose-600/30', shadowHover: 'shadow-rose-600/20' },
+  amber: { bgBase: 'bg-amber-600', bgLight: 'bg-amber-50', bgHover: 'hover:bg-amber-700', text: 'text-amber-600', textLight: 'text-amber-700', border: 'border-amber-100', borderFocus: 'focus:border-amber-500', ringFocus: 'focus:ring-amber-50', shadow: 'shadow-amber-500/50', shadowLg: 'shadow-amber-600/30', shadowHover: 'shadow-amber-600/20' },
+  cyan: { bgBase: 'bg-cyan-600', bgLight: 'bg-cyan-50', bgHover: 'hover:bg-cyan-700', text: 'text-cyan-600', textLight: 'text-cyan-700', border: 'border-cyan-100', borderFocus: 'focus:border-cyan-500', ringFocus: 'focus:ring-cyan-50', shadow: 'shadow-cyan-500/50', shadowLg: 'shadow-cyan-600/30', shadowHover: 'shadow-cyan-600/20' },
+  violet: { bgBase: 'bg-violet-600', bgLight: 'bg-violet-50', bgHover: 'hover:bg-violet-700', text: 'text-violet-600', textLight: 'text-violet-700', border: 'border-violet-100', borderFocus: 'focus:border-violet-500', ringFocus: 'focus:ring-violet-50', shadow: 'shadow-violet-500/50', shadowLg: 'shadow-violet-600/30', shadowHover: 'shadow-violet-600/20' },
+  fuchsia: { bgBase: 'bg-fuchsia-600', bgLight: 'bg-fuchsia-50', bgHover: 'hover:bg-fuchsia-700', text: 'text-fuchsia-600', textLight: 'text-fuchsia-700', border: 'border-fuchsia-100', borderFocus: 'focus:border-fuchsia-500', ringFocus: 'focus:ring-fuchsia-50', shadow: 'shadow-fuchsia-500/50', shadowLg: 'shadow-fuchsia-600/30', shadowHover: 'shadow-fuchsia-600/20' },
+};
+
+const getThemeClasses = (color: string | undefined): ThemeClasses => {
+  return THEME_MAP[color || 'indigo'] || THEME_MAP['indigo'];
+};
+
 export default function App() {
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
     const saved = localStorage.getItem('motoVehicles');
-    return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Motor Utama', manualKM: 0 }];
+    const parsed = saved ? JSON.parse(saved) : [{ id: 'default', name: 'Motor Utama', manualKM: 0, themeColor: 'indigo' }];
+    return parsed.map((v: any, index: number) => ({
+      ...v,
+      themeColor: v.themeColor || THEMES[index % THEMES.length]
+    }));
   });
   const [currentVehicleId, setCurrentVehicleId] = useState<string>(() => {
     return localStorage.getItem('motoCurrentVehicleId') || 'default';
@@ -25,8 +67,15 @@ export default function App() {
     const saved = localStorage.getItem('motorRecords');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    if (vehicles.length > 0 && !vehicles.some(v => v.id === currentVehicleId)) {
+      setCurrentVehicleId(vehicles[0].id);
+    }
+  }, [vehicles, currentVehicleId]);
   
   const isRemoteUpdate = useRef(false);
+  const isFirstMount = useRef(true);
 
   const TABS = ['home', 'analysis', 'history'] as const;
   const [currentMainTab, setCurrentMainTab] = useState<typeof TABS[number]>('home');
@@ -102,14 +151,17 @@ export default function App() {
   // Real-time synchronization from Cloud
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, 'motojournal', 'sync_data'), (docSnap) => {
-      if (docSnap.exists() && !docSnap.metadata.hasPendingWrites) {
+      if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data && data.vehicles && data.records) {
+        if (data && Array.isArray(data.vehicles) && Array.isArray(data.records)) {
            const localV = localStorage.getItem('motoVehicles');
            const localR = localStorage.getItem('motorRecords');
            if (JSON.stringify(data.vehicles) !== localV || JSON.stringify(data.records) !== localR) {
               isRemoteUpdate.current = true;
-              setVehicles(data.vehicles);
+              setVehicles(data.vehicles.map((v: any, idx: number) => ({
+                 ...v,
+                 themeColor: v.themeColor || THEMES[idx % THEMES.length]
+              })));
               setRecords(data.records);
               showToast("Data disinkronkan otomatis dari Cloud");
            }
@@ -119,11 +171,19 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Sync to Local Storage and Automatically to Cloud
+  // Sync to Local Storage
   useEffect(() => {
     localStorage.setItem('motoVehicles', JSON.stringify(vehicles));
     localStorage.setItem('motorRecords', JSON.stringify(records));
     localStorage.setItem('motoCurrentVehicleId', currentVehicleId);
+  }, [vehicles, records, currentVehicleId]);
+
+  // Automatically to Cloud on local changes
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
 
     if (isRemoteUpdate.current) {
       isRemoteUpdate.current = false;
@@ -144,7 +204,7 @@ export default function App() {
     
     const timeout = setTimeout(syncToCloud, 2000);
     return () => clearTimeout(timeout);
-  }, [vehicles, records, currentVehicleId]);
+  }, [vehicles, records]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now().toString();
@@ -155,8 +215,25 @@ export default function App() {
   };
 
   const activeVehicle = vehicles.find(v => v.id === currentVehicleId) || vehicles[0];
-  const vehicleRecords = records.filter(r => r.vehicleId === currentVehicleId).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const theme = getThemeClasses(activeVehicle?.themeColor);
+  const vehicleRecords = useMemo(() => {
+    if (!activeVehicle) return [];
+    return records
+      .filter(r => r.vehicleId === activeVehicle.id)
+      .sort((a, b) => {
+        const timeDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (timeDiff === 0) {
+          return b.odometer - a.odometer; // sort by odometer descending if same date
+        }
+        return timeDiff;
+      });
+  }, [records, currentVehicleId]);
   
+  const latestRecordByOdo = useMemo(() => {
+    if (!vehicleRecords.length) return null;
+    return vehicleRecords.reduce((max, r) => (r.odometer > max.odometer ? r : max), vehicleRecords[0]);
+  }, [vehicleRecords]);
+
   const filteredRecords = vehicleRecords.filter(record => {
     let match = true;
     if (historySearchQuery) {
@@ -197,7 +274,9 @@ export default function App() {
 
   const saveManualKM = () => {
     const newKM = parseInt(manualKMInput) || 0;
-    setVehicles(prev => prev.map(v => v.id === currentVehicleId ? { ...v, manualKM: newKM } : v));
+    if (activeVehicle) {
+      setVehicles(prev => prev.map(v => v.id === activeVehicle.id ? { ...v, manualKM: newKM } : v));
+    }
     setIsKMModalOpen(false);
     showToast("Odometer diperbarui");
   };
@@ -246,7 +325,7 @@ export default function App() {
     
     const newRecord: ServiceRecord = {
       id: editId || Date.now().toString(),
-      vehicleId: currentVehicleId,
+      vehicleId: activeVehicle?.id || currentVehicleId,
       date: serviceDate,
       odometer: odoValue,
       workshop: workshop,
@@ -261,8 +340,8 @@ export default function App() {
       setRecords(prev => [...prev, newRecord]);
     }
 
-    if (odoValue > (activeVehicle.manualKM || 0)) {
-       setVehicles(prev => prev.map(v => v.id === currentVehicleId ? { ...v, manualKM: odoValue } : v));
+    if (odoValue > (activeVehicle?.manualKM || 0)) {
+       setVehicles(prev => prev.map(v => v.id === activeVehicle?.id ? { ...v, manualKM: odoValue } : v));
     }
     
     setIsServiceModalOpen(false);
@@ -305,8 +384,9 @@ export default function App() {
   };
 
   const handleClearHistory = () => {
+    if (!activeVehicle) return;
     confirmAction('Reset Data', 'Anda yakin ingin menghapus semua riwayat motor ini?', () => {
-      setRecords(prev => prev.filter(r => r.vehicleId !== currentVehicleId));
+      setRecords(prev => prev.filter(r => r.vehicleId !== activeVehicle.id));
       showToast("Riwayat dibersihkan");
     });
   };
@@ -319,7 +399,10 @@ export default function App() {
       setVehicles(prev => prev.map(v => v.id === editVehicleId ? { ...v, name } : v));
       setEditVehicleId('');
     } else {
-      const newVeh = { id: 'veh_' + Date.now(), name, manualKM: 0 };
+      const usedThemes = vehicles.map(v => v.themeColor);
+      const availableThemes = THEMES.filter(t => !usedThemes.includes(t));
+      const nextTheme = availableThemes.length > 0 ? availableThemes[Math.floor(Math.random() * availableThemes.length)] : THEMES[Math.floor(Math.random() * THEMES.length)];
+      const newVeh = { id: 'veh_' + Date.now(), name, manualKM: 0, themeColor: nextTheme };
       setVehicles(prev => [...prev, newVeh]);
       setCurrentVehicleId(newVeh.id);
     }
@@ -335,46 +418,6 @@ export default function App() {
           setCurrentVehicleId(vehicles.find(v => v.id !== id)!.id);
         }
       });
-    }
-  };
-
-  const uploadToCloud = async () => {
-    setIsSyncing(true);
-    try {
-      const docRef = doc(db, 'motojournal', 'sync_data');
-      await setDoc(docRef, { vehicles, records });
-      showToast("Berhasil diunggah ke Cloud");
-    } catch (err) {
-      console.error("Upload error:", err);
-      showToast("Gagal mengunggah", "error");
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const downloadFromCloud = async () => {
-    setIsSyncing(true);
-    try {
-      const docRef = doc(db, 'motojournal', 'sync_data');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.vehicles && data.records) {
-          confirmAction('Sinkronisasi Cloud', 'Data lokal akan ditimpa dengan data dari Cloud. Lanjutkan?', () => {
-            setVehicles(data.vehicles);
-            setRecords(data.records);
-            showToast("Berhasil sinkronisasi");
-            setIsCloudModalOpen(false);
-          });
-        }
-      } else {
-        showToast("Tidak ada data di Cloud", "error");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Gagal mengunduh", "error");
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -396,7 +439,10 @@ export default function App() {
           const data = JSON.parse(event.target?.result as string);
           if (data.vehicles && data.records) {
             confirmAction('Restore Data', 'Data lama akan ditimpa. Lanjutkan?', () => {
-              setVehicles(data.vehicles);
+              setVehicles(data.vehicles.map((v: any, idx: number) => ({
+                 ...v,
+                 themeColor: v.themeColor || THEMES[idx % THEMES.length]
+              })));
               setRecords(data.records);
               showToast("Data dipulihkan");
               setIsCloudModalOpen(false);
@@ -419,7 +465,10 @@ export default function App() {
             if (data.length) {
               let veh = newVehicles.find(v => v.name === name);
               if (!veh) {
-                veh = { id: 'veh_' + Date.now() + Math.random(), name, manualKM: 0 };
+                const usedThemes = newVehicles.map(v => v.themeColor);
+                const availableThemes = THEMES.filter(t => !usedThemes.includes(t));
+                const nextTheme = availableThemes.length > 0 ? availableThemes[Math.floor(Math.random() * availableThemes.length)] : THEMES[Math.floor(Math.random() * THEMES.length)];
+                veh = { id: 'veh_' + Date.now() + Math.random(), name, manualKM: 0, themeColor: nextTheme };
                 newVehicles.push(veh);
               }
               const groups: Record<string, any> = {};
@@ -463,7 +512,7 @@ export default function App() {
     const [isOpen, setIsOpen] = useState(false);
     
     return (
-      <div className={`bg-white rounded-[24px] shadow-sm border border-slate-200 overflow-hidden transition-all duration-500 hover:shadow-md hover:border-slate-300 ${isOpen ? 'ring-2 ring-indigo-500/20 shadow-md' : ''}`}>
+      <div className={`bg-white rounded-[24px] shadow-sm border border-slate-200 overflow-hidden transition-all duration-500 hover:shadow-md hover:border-slate-300 ${isOpen ? `ring-2 ${theme.ringFocus} shadow-md` : ''}`}>
         <div onClick={() => setIsOpen(!isOpen)} className="p-5 flex items-center justify-between cursor-pointer transition-colors hover:bg-slate-50">
             <div className="flex items-center gap-4 flex-1">
                 <div className="min-w-0 flex-1 pl-1">
@@ -476,7 +525,7 @@ export default function App() {
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Bengkel</span>
-                            <span className="text-sm font-bold text-indigo-600 truncate">{record.workshop || 'Bengkel Umum'}</span>
+                            <span className={`text-sm font-bold ${theme.text} truncate`}>{record.workshop || 'Bengkel Umum'}</span>
                         </div>
                     </div>
                 </div>
@@ -485,9 +534,9 @@ export default function App() {
             <div className="flex items-center gap-4 ml-4">
                 <div className="text-right">
                     <p className="text-[8px] font-bold text-slate-400 uppercase leading-none mb-1">Total Biaya</p>
-                    <p className="text-sm font-black text-indigo-600">Rp {formatCurrency(record.totalCost)}</p>
+                    <p className={`text-sm font-black ${theme.text}`}>Rp {formatCurrency(record.totalCost)}</p>
                 </div>
-                <div className={`p-2 rounded-full transition-colors ${isOpen ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
+                <div className={`p-2 rounded-full transition-colors ${isOpen ? `${theme.bgLight} ${theme.text}` : 'bg-slate-50 text-slate-400 group-hover:bg-slate-100'}`}>
                     <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} strokeWidth={2.5}/>
                 </div>
             </div>
@@ -501,11 +550,11 @@ export default function App() {
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-3">Rincian Item & Jasa</p>
                             <div className="space-y-1.5">
                                  {record.items.map((i, idx) => {
-                                    const highlight = historySearchQuery && i.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ? 'bg-indigo-100 text-indigo-800 rounded px-1 -mx-1' : 'text-slate-700';
+                                    const highlight = historySearchQuery && i.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ? `${theme.bgLight} ${theme.textLight} rounded px-1 -mx-1` : 'text-slate-700';
                                     return (
                                     <div key={idx} className="flex justify-between items-center py-1.5 text-xs font-semibold border-b border-slate-200/50 last:border-0 hover:bg-slate-100 transition-colors px-2 -mx-2 rounded">
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest ${i.type === 'jasa' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>{i.type || 'PART'}</span>
+                                            <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest ${i.type === 'jasa' ? `${theme.bgLight} ${theme.text}` : 'bg-slate-200 text-slate-500'}`}>{i.type || 'PART'}</span>
                                             <span className={highlight}>{i.name}</span>
                                         </div>
                                         <span className="text-slate-500 font-mono text-[10px] pl-4">Rp {formatCurrency(i.price)}</span>
@@ -548,7 +597,7 @@ export default function App() {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-600 text-white rounded-[14px] shadow-md">
+                <div className={`p-2.5 ${theme.bgBase} text-white rounded-[14px] shadow-md`}>
                     <Wrench className="w-6 h-6" strokeWidth={2.5} />
                 </div>
                 <div>
@@ -557,13 +606,13 @@ export default function App() {
                 </div>
             </div>
             <div className="flex gap-2.5 items-center">
-                <button onClick={() => setIsCloudModalOpen(true)} title="Sinkronisasi & Backup" className="bg-white border text-center border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:text-indigo-600 active:scale-95 transition-all shadow-sm relative group flex items-center justify-center">
-                    <RefreshCw className={`w-5 h-5 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} strokeWidth={2.5}/>
+                <button onClick={() => setIsCloudModalOpen(true)} title="Sinkronisasi & Backup" className={`bg-white border text-center border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm relative group flex items-center justify-center`}>
+                    <RefreshCw className={`w-5 h-5 ${isSyncing ? `animate-spin ${theme.text}` : ''}`} strokeWidth={2.5}/>
                 </button>
-                <button onClick={() => setIsVehicleModalOpen(true)} title="Daftar Kendaraan" className="bg-white border border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:text-indigo-600 active:scale-95 transition-all shadow-sm flex items-center justify-center">
+                <button onClick={() => setIsVehicleModalOpen(true)} title="Daftar Kendaraan" className={`bg-white border border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm flex items-center justify-center`}>
                     <Grid className="w-5 h-5" strokeWidth={2.5} />
                 </button>
-                <button onClick={openAddServiceModal} title="Entri Servis Baru" className="bg-indigo-600 text-white p-3 rounded-[14px] shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center">
+                <button onClick={openAddServiceModal} title="Entri Servis Baru" className={`${theme.bgBase} text-white p-3 rounded-[14px] shadow-lg ${theme.shadowLg} ${theme.bgHover} hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center`}>
                     <Plus className="w-5 h-5" strokeWidth={3} />
                 </button>
             </div>
@@ -572,7 +621,7 @@ export default function App() {
         {/* Vehicle Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-4 mb-4 custom-scroll no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
           {vehicles.map(v => (
-            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 ${v.id === currentVehicleId ? 'bg-slate-800 text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
+            <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-6 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
               {v.name}
             </button>
           ))}
@@ -580,9 +629,9 @@ export default function App() {
 
         {/* Main Tabs */}
         <div className="bg-slate-200/50 p-1.5 rounded-3xl flex gap-1 mb-6 shadow-inner border border-slate-200 relative">
-            <button onClick={() => setCurrentMainTab('home')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? 'bg-white text-indigo-700 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
-            <button onClick={() => setCurrentMainTab('analysis')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? 'bg-white text-indigo-700 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
-            <button onClick={() => setCurrentMainTab('history')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? 'bg-white text-indigo-700 shadow-sm border border-slate-100' : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
+            <button onClick={() => setCurrentMainTab('home')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'home' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Beranda</button>
+            <button onClick={() => setCurrentMainTab('analysis')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'analysis' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Analisis</button>
+            <button onClick={() => setCurrentMainTab('history')} className={`flex-1 py-2.5 px-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 ${currentMainTab === 'history' ? `bg-white ${theme.textLight} shadow-sm border border-slate-100` : 'text-slate-500 hover:text-slate-700'}`}>Riwayat</button>
         </div>
 
         {/* Home Section */}
@@ -592,33 +641,33 @@ export default function App() {
                   <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 relative group transition-all duration-300 hover:shadow-md hover:border-slate-300">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none transition-colors">Odometer Saat Ini</p>
                       <h3 className="text-3xl font-black text-slate-800 tracking-tight transition-colors">{formatCurrency(activeVehicle?.manualKM || 0)} <span className="text-sm font-bold text-slate-500 tracking-normal inline-block ml-1">KM</span></h3>
-                      <button onClick={() => { setManualKMInput(activeVehicle?.manualKM?.toString() || '0'); setIsKMModalOpen(true); }} className="absolute top-4 right-4 p-2.5 bg-slate-50 text-slate-400 rounded-xl lg:opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-slate-100 hover:text-indigo-600 active:scale-95 border border-slate-200">
+                      <button onClick={() => { setManualKMInput(activeVehicle?.manualKM?.toString() || '0'); setIsKMModalOpen(true); }} className={`absolute top-4 right-4 p-2.5 bg-slate-50 text-slate-400 rounded-xl lg:opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-slate-100 hover:${theme.text} active:scale-95 border border-slate-200`}>
                           <Edit2 size={16} strokeWidth={2.5} />
                       </button>
                   </div>
                   <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none">Servis Terakhir</p>
-                      <h3 className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(vehicleRecords.length ? vehicleRecords[0].odometer : 0)} <span className="text-sm font-bold text-slate-500 tracking-normal inline-block ml-1">KM</span></h3>
+                      <h3 className="text-2xl font-black text-slate-800 tracking-tight">{formatCurrency(latestRecordByOdo ? latestRecordByOdo.odometer : 0)} <span className="text-sm font-bold text-slate-500 tracking-normal inline-block ml-1">KM</span></h3>
                   </div>
                   <div className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md hover:border-slate-300">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 shadow-none">Tanggal Terakhir</p>
-                      <h3 className="text-lg font-bold text-slate-800 mt-2">{vehicleRecords.length ? formatDate(vehicleRecords[0].date) : "-"}</h3>
+                      <h3 className="text-lg font-bold text-slate-800 mt-2">{latestRecordByOdo ? formatDate(latestRecordByOdo.date) : "-"}</h3>
                   </div>
               </div>
 
-              <div className="bg-indigo-600 border border-indigo-700/50 p-8 rounded-[32px] text-white shadow-xl shadow-indigo-600/20 relative overflow-hidden group hover:shadow-2xl transition-all duration-500">
+              <div className={`${theme.bgBase} border border-white/10 p-8 rounded-[32px] text-white shadow-xl ${theme.shadowHover} relative overflow-hidden group hover:shadow-2xl transition-all duration-500`}>
                   <div className="absolute top-[-30%] right-[-10%] w-[60%] h-[150%] bg-white/10 blur-3xl rounded-full mix-blend-overlay pointer-events-none"></div>
-                  <div className="absolute bottom-[-50%] left-[-20%] w-[50%] h-[100%] bg-indigo-400/30 blur-2xl rounded-full pointer-events-none"></div>
+                  <div className="absolute bottom-[-50%] left-[-20%] w-[50%] h-[100%] bg-white/10 blur-2xl rounded-full pointer-events-none"></div>
                   <div className="relative z-10">
-                      <h2 className="text-3xl font-black mb-2 tracking-tight">Halo, <span className="text-indigo-200">{activeVehicle?.name}</span>.</h2>
-                      <p className="text-sm font-medium text-indigo-100/90 leading-relaxed mb-8 max-w-sm">Pantau terus performa kendaraan Anda agar selalu prima di jalanan.</p>
+                      <h2 className="text-3xl font-black mb-2 tracking-tight">Halo, <span className="opacity-90">{activeVehicle?.name}</span>.</h2>
+                      <p className="text-sm font-medium text-white/90 leading-relaxed mb-8 max-w-sm">Pantau terus performa kendaraan Anda agar selalu prima di jalanan.</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <button onClick={openAddServiceModal} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
-                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-indigo-100">Aksi Cepat</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Aksi Cepat</p>
                               <p className="text-sm font-bold tracking-wide">Catat Servis</p>
                           </button>
                           <button onClick={() => setCurrentMainTab('analysis')} className="bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 backdrop-blur-md p-5 rounded-[24px] transition-all duration-300 text-left group/btn shadow-sm">
-                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-indigo-100">Cek Mesin</p>
+                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-1.5 text-white/80">Cek Mesin</p>
                               <p className="text-sm font-bold tracking-wide">Lihat Analisa</p>
                           </button>
                       </div>
@@ -709,7 +758,7 @@ export default function App() {
                           
                           <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/50 p-3 rounded-xl">
                               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estimasi Ganti</span>
-                              <span className="text-xs font-black text-indigo-600">{isUrgent ? 'Sekarang' : formatDate(estDate.toISOString().split('T')[0])}</span>
+                              <span className={`text-xs font-black ${theme.text}`}>{isUrgent ? 'Sekarang' : formatDate(estDate.toISOString().split('T')[0])}</span>
                           </div>
 
                           <div className="space-y-2.5 mt-5">
@@ -733,25 +782,25 @@ export default function App() {
           <section className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex flex-col gap-5 mb-2">
                   <div className="flex items-center justify-between px-1">
-                      <h2 className="font-black text-slate-900 text-2xl tracking-tight">Catatan <span className="text-indigo-600">{activeVehicle?.name}</span></h2>
+                      <h2 className="font-black text-slate-900 text-2xl tracking-tight">Catatan <span className={`${theme.text}`}>{activeVehicle?.name}</span></h2>
                       <button onClick={handleClearHistory} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Kosongkan</button>
                   </div>
                   
                   <div className="flex flex-col gap-3">
                       <div className="relative group">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                          <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:${theme.text} transition-colors`}>
                               <Search size={18} strokeWidth={2.5}/>
                           </div>
-                          <input type="text" value={historySearchQuery} onChange={e => setHistorySearchQuery(e.target.value)} placeholder="Cari suku cadang, bengkel..." className="w-full bg-white border border-slate-200 text-slate-800 placeholder:text-slate-400 py-3.5 pl-12 pr-4 rounded-[16px] text-sm font-semibold outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all duration-300 shadow-sm hover:border-slate-300" />
+                          <input type="text" value={historySearchQuery} onChange={e => setHistorySearchQuery(e.target.value)} placeholder="Cari suku cadang, bengkel..." className={`w-full bg-white border border-slate-200 text-slate-800 placeholder:text-slate-400 py-3.5 pl-12 pr-4 rounded-[16px] text-sm font-semibold outline-none ${theme.borderFocus} ${theme.ringFocus} transition-all duration-300 shadow-sm hover:border-slate-300`} />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                          <select value={historyMonthFilter} onChange={e => setHistoryMonthFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300">
+                          <select value={historyMonthFilter} onChange={e => setHistoryMonthFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
                               <option value="">Semua Waktu</option>
                               {Array.from(new Set(vehicleRecords.map(r => r.date.substring(0, 7)))).sort().reverse().map(ym => (
                                   <option key={ym} value={ym}>{new Date(`${ym}-01`).toLocaleString('default', { month: 'long', year: 'numeric' })}</option>
                               ))}
                           </select>
-                          <select value={historyPriceFilter} onChange={e => setHistoryPriceFilter(e.target.value)} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none focus:ring-4 focus:ring-indigo-50 transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300">
+                          <select value={historyPriceFilter} onChange={e => setHistoryPriceFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
                               <option value="">Semua Harga</option>
                               <option value="0-50000">&lt; Rp 50.000</option>
                               <option value="50000-250000">Rp 50rb - 250rb</option>
@@ -796,9 +845,9 @@ export default function App() {
             <div className="p-6 space-y-5">
                 <div className="space-y-1 group">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Odometer Saat Ini (KM)</label>
-                    <input type="number" value={manualKMInput} onChange={e => setManualKMInput(e.target.value)} placeholder="0" className="w-full px-4 py-4 bg-white border border-slate-200 focus:border-indigo-500 shadow-sm rounded-[16px] text-xl font-black text-slate-800 placeholder:text-slate-300 outline-none focus:ring-4 focus:ring-indigo-50 transition-all duration-300" />
+                    <input type="number" value={manualKMInput} onChange={e => setManualKMInput(e.target.value)} placeholder="0" className={`w-full px-4 py-4 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-[16px] text-xl font-black text-slate-800 placeholder:text-slate-300 outline-none ${theme.ringFocus} transition-all duration-300`} />
                 </div>
-                <button onClick={saveManualKM} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-[16px] shadow-lg shadow-indigo-600/20 active:scale-95 transition-all duration-300">Simpan Odometer</button>
+                <button onClick={saveManualKM} className={`w-full ${theme.bgBase} ${theme.bgHover} text-white font-bold py-4 rounded-[16px] shadow-lg ${theme.shadowHover} active:scale-95 transition-all duration-300`}>Simpan Odometer</button>
             </div>
         </div>
       </div>
@@ -816,36 +865,36 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1 w-full">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Tanggal</label>
-                        <input type="date" required value={serviceDate} onChange={e => setServiceDate(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 shadow-sm rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-50 outline-none text-slate-800 transition-all duration-300" />
+                        <input type="date" required value={serviceDate} onChange={e => setServiceDate(e.target.value)} className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                     </div>
                     <div className="space-y-1 w-full">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Odometer Servis</label>
-                        <input type="number" required value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="0" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 shadow-sm rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-50 outline-none text-slate-800 transition-all duration-300" />
+                        <input type="number" required value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="0" className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                     </div>
                 </div>
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Bengkel</label>
-                    <input type="text" value={workshop} onChange={e => setWorkshop(e.target.value)} placeholder="Nama Bengkel" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 shadow-sm rounded-xl text-sm font-medium focus:ring-4 focus:ring-indigo-50 outline-none text-slate-800 transition-all duration-300" />
+                    <input type="text" value={workshop} onChange={e => setWorkshop(e.target.value)} placeholder="Nama Bengkel" className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                 </div>
                 <div className="space-y-3">
                     <div className="flex justify-between items-center px-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Rincian Komponen / Jasa</label>
-                        <button type="button" onClick={handleAddServiceItem} className="text-[10px] bg-indigo-50/80 text-indigo-700 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-all border border-indigo-100">+ Item</button>
+                        <button type="button" onClick={handleAddServiceItem} className={`text-[10px] ${theme.bgLight} ${theme.textLight} px-3 py-1.5 rounded-lg font-bold hover:brightness-95 transition-all border ${theme.border}`}>+ Item</button>
                     </div>
                     <div className="space-y-3 max-h-60 overflow-y-auto custom-scroll p-1 -m-1">
                       {serviceItems.map((item, idx) => (
-                         <div key={item.id} className="flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative transition-all duration-300 focus-within:border-indigo-300 focus-within:bg-white focus-within:shadow-sm">
+                         <div key={item.id} className={`flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative transition-all duration-300 group-focus-within:border-slate-300 focus-within:bg-white focus-within:shadow-sm ${theme.borderFocus}`}>
                              <input type="text" placeholder="Nama part/jasa" value={item.name} required onChange={e => {
                                const newItems = [...serviceItems]; newItems[idx].name = e.target.value; setServiceItems(newItems);
-                             }} className="w-full bg-transparent border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-semibold py-1.5 text-slate-800 placeholder:text-slate-400 transition-colors"/>
+                             }} className={`w-full bg-transparent border-b border-slate-200 ${theme.borderFocus} outline-none text-sm font-semibold py-1.5 text-slate-800 placeholder:text-slate-400 transition-colors`}/>
                              <div className="flex items-center justify-between mt-1">
                                  <div className="flex bg-slate-200/50 p-1 rounded-xl">
-                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'part'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type !== 'jasa' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Part</button>
-                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'jasa'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type === 'jasa' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Jasa</button>
+                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'part'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type !== 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Part</button>
+                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'jasa'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type === 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Jasa</button>
                                  </div>
                                  <input type="number" placeholder="Rp 0" value={item.price} onChange={e => {
                                    const newItems = [...serviceItems]; newItems[idx].price = e.target.value; setServiceItems(newItems);
-                                 }} className="bg-transparent text-right outline-none text-sm font-mono font-bold w-1/2 text-slate-800 placeholder:text-slate-300 focus:text-indigo-600 transition-colors"/>
+                                 }} className={`bg-transparent text-right outline-none text-sm font-mono font-bold w-1/2 text-slate-800 placeholder:text-slate-300 transition-colors focus:${theme.text}`}/>
                              </div>
                              {serviceItems.length > 1 && (
                                 <button type="button" onClick={() => setServiceItems(prev => prev.filter(i => i.id !== item.id))} className="absolute -right-2.5 -top-2.5 bg-white shadow-sm p-1.5 rounded-full text-slate-400 hover:text-red-500 border border-slate-200 transition-all hover:scale-110">
@@ -881,9 +930,9 @@ export default function App() {
                 <div className="pt-5 border-t border-slate-100 mt-2">
                     <div className="flex justify-between items-center mb-6 px-1">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Biaya</span>
-                        <span className="text-2xl font-black text-indigo-600 tracking-tight">Rp {formatCurrency(calculateFormTotal())}</span>
+                        <span className={`text-2xl font-black ${theme.text} tracking-tight`}>Rp {formatCurrency(calculateFormTotal())}</span>
                     </div>
-                    <button type="submit" disabled={isUploading} className="w-full bg-indigo-600 disabled:opacity-70 flex justify-center items-center gap-2 hover:bg-indigo-700 text-white font-bold py-4 rounded-[16px] shadow-lg shadow-indigo-600/20 active:scale-95 transition-all duration-300">
+                    <button type="submit" disabled={isUploading} className={`w-full ${theme.bgBase} disabled:opacity-70 flex justify-center items-center gap-2 ${theme.bgHover} text-white font-bold py-4 rounded-[16px] shadow-lg ${theme.shadowHover} active:scale-95 transition-all duration-300`}>
                         {isUploading ? <><RefreshCw size={18} className="animate-spin" /> Mengupload...</> : 'Simpan Catatan'}
                     </button>
                 </div>
@@ -902,7 +951,7 @@ export default function App() {
                 <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Tambah / Edit Kendaraan</label>
                     <div className="flex gap-2">
-                        <input type="text" value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} placeholder="Nama Kendaraan" className="flex-1 px-4 py-3 bg-white border border-slate-200 focus:border-indigo-500 shadow-sm rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:ring-4 focus:ring-indigo-50 outline-none transition-all duration-300" />
+                        <input type="text" value={newVehicleName} onChange={e => setNewVehicleName(e.target.value)} placeholder="Nama Kendaraan" className={`flex-1 px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium text-slate-800 placeholder:text-slate-400 ${theme.ringFocus} outline-none transition-all duration-300`} />
                         <button onClick={handleAddVehicle} className="bg-slate-800 hover:bg-slate-900 text-white px-6 rounded-xl font-bold text-sm shadow-md active:scale-95 transition-all duration-300">{editVehicleId ? 'Update' : 'Simpan'}</button>
                     </div>
                 </div>
@@ -911,7 +960,7 @@ export default function App() {
                      <div key={v.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 hover:border-slate-300 hover:shadow-sm rounded-2xl transition-all duration-300">
                         <span className="text-sm font-bold text-slate-800">{v.name}</span>
                         <div className="flex gap-1.5">
-                            <button onClick={() => { setEditVehicleId(v.id); setNewVehicleName(v.name); }} className="text-slate-500 p-2 hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-100 rounded-xl transition-all"><Edit2 size={16} strokeWidth={2.5} /></button>
+                            <button onClick={() => { setEditVehicleId(v.id); setNewVehicleName(v.name); }} className={`text-slate-500 p-2 hover:${theme.bgLight} hover:${theme.text} border border-transparent hover:${theme.border} rounded-xl transition-all`}><Edit2 size={16} strokeWidth={2.5} /></button>
                             <button onClick={() => handleDeleteVehicle(v.id)} className="text-slate-500 p-2 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-100 rounded-xl transition-all"><Trash2 size={16} strokeWidth={2.5} /></button>
                         </div>
                     </div>
@@ -925,21 +974,10 @@ export default function App() {
       <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end md:items-center justify-center transition-all duration-300 ${isCloudModalOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
         <div className={`bg-white rounded-t-3xl md:rounded-3xl shadow-2xl border border-slate-100 w-full max-w-sm overflow-hidden transform transition-all duration-300 ${isCloudModalOpen ? 'translate-y-0 scale-100' : 'translate-y-12 md:translate-y-0 md:scale-95'}`}>
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">Sinkronisasi & Ekspor</h3>
+                <h3 className="text-lg font-black text-slate-800 tracking-tight">Ekspor & Backup</h3>
                 <button onClick={() => setIsCloudModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-xl transition-all"><X size={20} strokeWidth={2.5}/></button>
             </div>
             <div className="p-6 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button onClick={uploadToCloud} disabled={isSyncing} className="bg-indigo-50/80 border border-indigo-100 text-indigo-700 py-3 rounded-[14px] font-bold text-xs flex items-center justify-center gap-2 hover:bg-indigo-100 active:scale-95 transition-all disabled:opacity-70">
-                        <RefreshCw size={16} strokeWidth={2.5} className={isSyncing ? 'animate-spin' : ''} />
-                        Upload
-                    </button>
-                    <button onClick={downloadFromCloud} disabled={isSyncing} className="bg-slate-50 border border-slate-200 text-slate-600 py-3 rounded-[14px] font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-100 active:scale-95 transition-all disabled:opacity-70 shadow-sm">
-                        <RefreshCw size={16} strokeWidth={2.5} className={isSyncing ? 'animate-spin' : ''} />
-                        Sync Down
-                    </button>
-                </div>
-                <div className="h-px bg-slate-100 my-2"></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button onClick={() => exportToExcel(records, vehicles, showToast)} className="bg-emerald-50 border border-emerald-100 text-emerald-700 py-3 rounded-[14px] font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-emerald-100 active:scale-95 transition-all">Ekspor Excel</button>
                     <button onClick={() => triggerFileImport('.xlsx')} className="bg-white border border-slate-200 text-slate-600 py-3 rounded-[14px] font-bold text-[11px] uppercase tracking-wider shadow-sm hover:bg-slate-50 active:scale-95 transition-all">Impor Excel</button>
@@ -966,7 +1004,7 @@ export default function App() {
                 </p>
                 <div className="flex gap-3 mt-4">
                   <button onClick={confirmDialog.onCancel} className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3.5 rounded-[16px] transition-all active:scale-95 shadow-sm">Batal</button>
-                  <button onClick={confirmDialog.onConfirm} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-[16px] shadow-md shadow-indigo-600/20 active:scale-95 transition-all">Ya, Lanjutkan</button>
+                  <button onClick={confirmDialog.onConfirm} className={`flex-1 ${theme.bgBase} ${theme.bgHover} text-white font-bold py-3.5 rounded-[16px] shadow-md ${theme.shadowHover} active:scale-95 transition-all`}>Ya, Lanjutkan</button>
                 </div>
             </div>
         </div>

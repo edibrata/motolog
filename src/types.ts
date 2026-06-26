@@ -2,6 +2,7 @@ export interface Vehicle {
   id: string;
   name: string;
   manualKM: number;
+  themeColor?: string;
 }
 
 export interface RecordItem {
