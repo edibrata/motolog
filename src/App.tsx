@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  Wrench, RefreshCw, Grid, Plus, Edit2, Trash2, X, ChevronDown, Search, ArrowUp, Paperclip, Camera, AlertTriangle
+  Wrench, RefreshCw, Grid, Plus, Edit2, Trash2, X, ChevronDown, Search, ArrowUp, Paperclip, Camera, AlertTriangle, Bell
 } from 'lucide-react';
 import { Vehicle, ServiceRecord, ToastMessage, RecordItem } from './types';
 import { 
@@ -163,6 +163,104 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Reminder/Notification system states
+  const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
+  const [reminderThreshold, setReminderThreshold] = useState<number>(() => {
+    return parseInt(localStorage.getItem('motoReminderThreshold') || '500');
+  });
+  const [notificationPermission, setNotificationPermission] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
+
+  const requestNotificationPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
+        if (permission === 'granted') {
+          showToast("Izin notifikasi browser diberikan!");
+          new Notification("MotoJournal", {
+            body: "Terima kasih! Notifikasi pengingat jadwal servis telah aktif.",
+            icon: "/favicon.ico"
+          });
+        } else {
+          showToast("Izin notifikasi ditolak", "error");
+        }
+      } catch (err) {
+        showToast("Gagal meminta izin notifikasi", "error");
+      }
+    } else {
+      showToast("Notifikasi browser tidak didukung di perangkat ini", "error");
+    }
+  };
+
+  const checkAndNotifyService = (force: boolean = false) => {
+    if (!activeVehicle) return;
+    
+    const overdueList: string[] = [];
+    const approachingList: string[] = [];
+    
+    const currentKM = activeVehicle.manualKM || 0;
+    
+    INTEL_CONFIG.forEach(cfg => {
+      const matches = vehicleRecords.filter(r => 
+        r.items.some(item => cfg.kws.some(kw => item.name.toLowerCase().includes(kw)))
+      );
+      const lastRec = matches.length ? matches[0] : null;
+      const lastKM = lastRec ? lastRec.odometer : 0;
+      let progress = 0;
+      if (lastRec) {
+          progress = ((currentKM - lastKM) / cfg.interval) * 100;
+      } else if (currentKM > 0) {
+          progress = (currentKM / cfg.interval) * 100;
+      }
+      const nextKM = lastKM + cfg.interval;
+      const remKM = nextKM - currentKM;
+      
+      if (remKM <= 0) {
+        overdueList.push(cfg.name);
+      } else if (remKM <= reminderThreshold) {
+        approachingList.push(`${cfg.name} (${formatCurrency(remKM)} KM lagi)`);
+      }
+    });
+
+    if (overdueList.length > 0 || approachingList.length > 0) {
+      let bodyText = "";
+      if (overdueList.length > 0) {
+        bodyText += `Perlu servis segera: ${overdueList.join(', ')}. `;
+      }
+      if (approachingList.length > 0) {
+        bodyText += `Mendekati jadwal: ${approachingList.join(', ')}.`;
+      }
+
+      // Show browser Notification
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(`Pengingat Servis ${activeVehicle.name}`, {
+            body: bodyText,
+            icon: "/favicon.ico"
+          });
+        } catch (e) {
+          console.error("Failed to send Notification:", e);
+        }
+      }
+
+      // Show in-app toast
+      showToast(`📢 ${overdueList.length ? 'Ada komponen kritis!' : 'Ada komponen mendekati jadwal servis.'} Cek tab Analisis.`, "error");
+    } else {
+      if (force) {
+        showToast("✅ Semua komponen kendaraan dalam kondisi prima!");
+      }
+    }
+  };
+
+  useEffect(() => {
+    localStorage.setItem('motoReminderThreshold', reminderThreshold.toString());
+  }, [reminderThreshold]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time synchronization from Cloud
@@ -245,6 +343,25 @@ export default function App() {
         return timeDiff;
       });
   }, [records, currentVehicleId]);
+
+  const lastNotifiedRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!activeVehicle) return;
+    const key = `${activeVehicle.id}_${activeVehicle.manualKM}`;
+    if (lastNotifiedRef.current === key) return;
+    
+    // Skip on very first mount
+    if (isFirstMount.current) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      checkAndNotifyService(false);
+      lastNotifiedRef.current = key;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [activeVehicle?.manualKM, activeVehicle?.id, vehicleRecords]);
   
   const latestRecordByOdo = useMemo(() => {
     if (!vehicleRecords.length) return null;
@@ -269,6 +386,27 @@ export default function App() {
         return progress >= 100;
     });
   }, [activeVehicle, vehicleRecords]);
+
+  const componentsApproachingService = useMemo(() => {
+    if (!activeVehicle) return [];
+    const currentKM = activeVehicle.manualKM || 0;
+    return INTEL_CONFIG.filter(cfg => {
+        const matches = vehicleRecords.filter(r => 
+          r.items.some(item => cfg.kws.some(kw => item.name.toLowerCase().includes(kw)))
+        );
+        const lastRec = matches.length ? matches[0] : null;
+        const lastKM = lastRec ? lastRec.odometer : 0;
+        let progress = 0;
+        if (lastRec) {
+            progress = ((currentKM - lastKM) / cfg.interval) * 100;
+        } else if (currentKM > 0) {
+            progress = (currentKM / cfg.interval) * 100;
+        }
+        const nextKM = lastKM + cfg.interval;
+        const remKM = nextKM - currentKM;
+        return remKM > 0 && remKM <= reminderThreshold;
+    });
+  }, [activeVehicle, vehicleRecords, reminderThreshold]);
 
   const filteredRecords = vehicleRecords.filter(record => {
     let match = true;
@@ -345,11 +483,42 @@ export default function App() {
     if (attachmentFile) {
       setIsUploading(true);
       try {
-        const fileRef = ref(storage, `attachments/${Date.now()}_${attachmentFile.name}`);
-        await uploadBytes(fileRef, attachmentFile);
-        uploadedUrl = await getDownloadURL(fileRef);
+        uploadedUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const MAX_WIDTH = 800;
+              const MAX_HEIGHT = 800;
+              let width = img.width;
+              let height = img.height;
+
+              if (width > height) {
+                if (width > MAX_WIDTH) {
+                  height *= MAX_WIDTH / width;
+                  width = MAX_WIDTH;
+                }
+              } else {
+                if (height > MAX_HEIGHT) {
+                  width *= MAX_HEIGHT / height;
+                  height = MAX_HEIGHT;
+                }
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx?.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', 0.75));
+            };
+            img.onerror = () => reject(new Error('Gagal memproses gambar'));
+            img.src = e.target?.result as string;
+          };
+          reader.onerror = () => reject(new Error('Gagal membaca file'));
+          reader.readAsDataURL(attachmentFile);
+        });
       } catch (err) {
-        showToast("Gagal mengupload foto");
+        showToast("Gagal memproses foto lampiran");
         setIsUploading(false);
         return;
       }
@@ -823,9 +992,9 @@ export default function App() {
                                 </a>
                             </div>
                         )}
-                        <div className="flex gap-3">
-                            <button onClick={() => openEditRecordModal(record.id)} className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-slate-50 active:scale-95 transition-all shadow-sm">Ubah Data</button>
-                            <button onClick={() => handleDeleteRecord(record.id)} className="flex-1 py-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-100 active:scale-95 transition-all shadow-sm">Hapus</button>
+                        <div className="flex gap-3 mt-1">
+                            <button onClick={() => openEditRecordModal(record.id)} className="flex-1 py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-slate-50 active:scale-95 transition-all shadow-sm">Ubah Data</button>
+                            <button onClick={() => handleDeleteRecord(record.id)} className="flex-1 py-3.5 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-100 active:scale-95 transition-all shadow-sm">Hapus</button>
                         </div>
                     </div>
                 </div>
@@ -858,6 +1027,12 @@ export default function App() {
                 </div>
             </div>
             <div className="flex gap-1.5 sm:gap-2.5 items-center shrink-0">
+                <button onClick={() => setIsReminderModalOpen(true)} title="Sistem Pengingat" className={`bg-white border text-center border-slate-200 text-slate-500 p-2 sm:p-3 rounded-[12px] sm:rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm relative group flex items-center justify-center`}>
+                    <Bell className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5}/>
+                    {(componentsNeedingService.length > 0 || componentsApproachingService.length > 0) && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>
+                    )}
+                </button>
                 <button onClick={() => setIsCloudModalOpen(true)} title="Sinkronisasi & Backup" className={`bg-white border text-center border-slate-200 text-slate-500 p-2 sm:p-3 rounded-[12px] sm:rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm relative group flex items-center justify-center`}>
                     <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? `animate-spin ${theme.text}` : ''}`} strokeWidth={2.5}/>
                 </button>
@@ -910,6 +1085,20 @@ export default function App() {
                               {componentsNeedingService.length} komponen telah mencapai batas interval dan perlu segera diperiksa: <span className="font-bold">{componentsNeedingService.map(c => c.name).join(', ')}</span>.
                           </p>
                           <button onClick={() => handleTabChange('analysis')} className="text-xs font-bold bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95">Lihat Detail Analisis</button>
+                      </div>
+                  </div>
+              )}
+              {componentsApproachingService.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-[20px] flex items-start gap-4 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+                      <div className="bg-amber-100 p-2.5 rounded-xl text-amber-600 shadow-sm border border-amber-200">
+                          <Bell size={20} strokeWidth={2.5} />
+                      </div>
+                      <div className="flex-1 mt-0.5">
+                          <h4 className="text-sm font-black text-amber-800 tracking-tight mb-1">Pemberitahuan: Mendekati Batas Servis!</h4>
+                          <p className="text-xs font-medium text-amber-700/90 leading-relaxed mb-3">
+                              {componentsApproachingService.length} komponen hampir mencapai batas interval penggantian (dalam {formatCurrency(reminderThreshold)} KM): <span className="font-bold">{componentsApproachingService.map(c => c.name).join(', ')}</span>.
+                          </p>
+                          <button onClick={() => handleTabChange('analysis')} className="text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95">Lihat Detail Analisis</button>
                       </div>
                   </div>
               )}
@@ -1116,13 +1305,13 @@ export default function App() {
                           <input type="text" value={historySearchQuery} onChange={e => setHistorySearchQuery(e.target.value)} placeholder="Cari suku cadang, bengkel..." className={`w-full bg-white border border-slate-200 text-slate-800 placeholder:text-slate-400 py-3.5 pl-12 pr-4 rounded-[16px] text-sm font-semibold outline-none ${theme.borderFocus} ${theme.ringFocus} transition-all duration-300 shadow-sm hover:border-slate-300`} />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                          <select value={historyMonthFilter} onChange={e => setHistoryMonthFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
+                          <select value={historyMonthFilter} onChange={e => setHistoryMonthFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3.5 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
                               <option value="">Semua Waktu</option>
                               {Array.from(new Set(vehicleRecords.map(r => r.date.substring(0, 7)))).sort().reverse().map(ym => (
                                   <option key={ym} value={ym}>{new Date(`${ym}-01`).toLocaleString('default', { month: 'long', year: 'numeric' })}</option>
                               ))}
                           </select>
-                          <select value={historyPriceFilter} onChange={e => setHistoryPriceFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
+                          <select value={historyPriceFilter} onChange={e => setHistoryPriceFilter(e.target.value)} className={`bg-white border border-slate-200 text-slate-700 text-xs font-bold py-3.5 pl-4 pr-8 rounded-[16px] outline-none ${theme.ringFocus} transition-all shadow-sm appearance-none cursor-pointer hover:border-slate-300`}>
                               <option value="">Semua Harga</option>
                               <option value="0-50000">&lt; Rp 50.000</option>
                               <option value="50000-250000">Rp 50rb - 250rb</option>
@@ -1185,44 +1374,44 @@ export default function App() {
                     <X size={20} strokeWidth={2.5}/>
                 </button>
             </div>
-            <form onSubmit={handleServiceSubmit} className="p-6 space-y-5 max-h-[85vh] overflow-y-auto custom-scroll pb-6">
+            <form onSubmit={handleServiceSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 max-h-[85vh] overflow-y-auto custom-scroll pb-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1 w-full">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Tanggal</label>
-                        <input type="date" required value={serviceDate} onChange={e => setServiceDate(e.target.value)} className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
+                        <input type="date" required value={serviceDate} onChange={e => setServiceDate(e.target.value)} className={`w-full px-4 py-3.5 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                     </div>
                     <div className="space-y-1 w-full">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Odometer Servis</label>
-                        <input type="number" required value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="0" className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
+                        <input type="number" required value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="0" className={`w-full px-4 py-3.5 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                     </div>
                 </div>
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Bengkel</label>
-                    <input type="text" value={workshop} onChange={e => setWorkshop(e.target.value)} placeholder="Nama Bengkel" className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
+                    <input type="text" value={workshop} onChange={e => setWorkshop(e.target.value)} placeholder="Nama Bengkel" className={`w-full px-4 py-3.5 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-medium ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`} />
                 </div>
                 <div className="space-y-3">
                     <div className="flex justify-between items-center px-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Rincian Komponen / Jasa</label>
-                        <button type="button" onClick={handleAddServiceItem} className={`text-[10px] ${theme.bgLight} ${theme.textLight} px-3 py-1.5 rounded-lg font-bold hover:brightness-95 transition-all border ${theme.border}`}>+ Item</button>
+                        <button type="button" onClick={handleAddServiceItem} className={`text-xs ${theme.bgLight} ${theme.textLight} px-4 py-2 rounded-xl font-bold hover:brightness-95 transition-all border ${theme.border}`}>+ Item</button>
                     </div>
                     <div className="space-y-3 max-h-60 overflow-y-auto custom-scroll p-1 -m-1">
                       {serviceItems.map((item, idx) => (
-                         <div key={item.id} className={`flex flex-col gap-2 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative transition-all duration-300 group-focus-within:border-slate-300 focus-within:bg-white focus-within:shadow-sm ${theme.borderFocus}`}>
+                         <div key={item.id} className={`flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl relative transition-all duration-300 group-focus-within:border-slate-300 focus-within:bg-white focus-within:shadow-sm ${theme.borderFocus}`}>
                              <input type="text" placeholder="Nama part/jasa" value={item.name} required onChange={e => {
                                const newItems = [...serviceItems]; newItems[idx].name = e.target.value; setServiceItems(newItems);
-                             }} className={`w-full bg-transparent border-b border-slate-200 ${theme.borderFocus} outline-none text-sm font-semibold py-1.5 text-slate-800 placeholder:text-slate-400 transition-colors`}/>
+                             }} className={`w-full pr-8 bg-transparent border-b border-slate-200 ${theme.borderFocus} outline-none text-sm font-semibold py-1.5 text-slate-800 placeholder:text-slate-400 transition-colors`}/>
                              <div className="flex items-center justify-between mt-1">
                                  <div className="flex bg-slate-200/50 p-1 rounded-xl">
-                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'part'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type !== 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Part</button>
-                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'jasa'; setServiceItems(newItems); }} className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all ${item.type === 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Jasa</button>
+                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'part'; setServiceItems(newItems); }} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${item.type !== 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Part</button>
+                                    <button type="button" onClick={() => { const newItems = [...serviceItems]; newItems[idx].type = 'jasa'; setServiceItems(newItems); }} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${item.type === 'jasa' ? `bg-white ${theme.text} shadow-sm` : 'text-slate-500 hover:text-slate-700'}`}>Jasa</button>
                                  </div>
                                  <input type="number" placeholder="Rp 0" value={item.price} onChange={e => {
                                    const newItems = [...serviceItems]; newItems[idx].price = e.target.value; setServiceItems(newItems);
-                                 }} className={`bg-transparent text-right outline-none text-sm font-mono font-bold w-1/2 text-slate-800 placeholder:text-slate-300 transition-colors focus:${theme.text}`}/>
+                                 }} className={`bg-transparent text-right outline-none text-sm font-mono font-bold w-1/2 text-slate-800 placeholder:text-slate-300 transition-colors focus:${theme.text} py-1`}/>
                              </div>
                              {serviceItems.length > 1 && (
-                                <button type="button" onClick={() => setServiceItems(prev => prev.filter(i => i.id !== item.id))} className="absolute -right-2.5 -top-2.5 bg-white shadow-sm p-1.5 rounded-full text-slate-400 hover:text-red-500 border border-slate-200 transition-all hover:scale-110">
-                                  <X size={14} strokeWidth={3} />
+                                <button type="button" onClick={() => setServiceItems(prev => prev.filter(i => i.id !== item.id))} className="absolute right-3 top-3 bg-white/80 backdrop-blur-sm shadow-md p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-white border border-slate-200 transition-all active:scale-90">
+                                  <X size={16} strokeWidth={2.5} />
                                 </button>
                              )}
                          </div>
@@ -1235,7 +1424,7 @@ export default function App() {
                     <div className="flex items-center gap-3">
                         <label className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl cursor-pointer hover:bg-slate-50 transition-all shadow-sm">
                             <Paperclip size={16} />
-                            <span className="text-xs font-bold">{attachmentFile ? attachmentFile.name : (attachmentUrl ? 'Ganti Foto' : 'Pilih Foto')}</span>
+                            <span className="text-xs font-bold truncate max-w-[150px] sm:max-w-[200px]">{attachmentFile ? attachmentFile.name : (attachmentUrl ? 'Ganti Foto' : 'Pilih Foto')}</span>
                             <input type="file" accept="image/*" className="hidden" onChange={e => { if (e.target.files && e.target.files[0]) setAttachmentFile(e.target.files[0]); }} />
                         </label>
                         {(attachmentFile || attachmentUrl) && (
@@ -1343,6 +1532,67 @@ export default function App() {
                     <button onClick={() => triggerFileImport('.json')} className="bg-white border border-slate-200 text-slate-600 py-3 rounded-[14px] font-bold text-[11px] uppercase tracking-wider shadow-sm hover:bg-slate-50 active:scale-95 transition-all">Restore JSON</button>
                 </div>
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileImport} />
+            </div>
+        </div>
+      </div>
+
+      {/* Reminder / Notification Modal */}
+      <div className={`fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-end md:items-center justify-center transition-all duration-300 ${isReminderModalOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+        <div className={`bg-white rounded-t-3xl md:rounded-3xl shadow-2xl border border-slate-100 w-full max-w-sm overflow-hidden transform transition-all duration-300 ${isReminderModalOpen ? 'translate-y-0 scale-100' : 'translate-y-12 md:translate-y-0 md:scale-95'}`}>
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                    <Bell size={20} className={theme.text} strokeWidth={2.5} />
+                    Sistem Pengingat
+                </h3>
+                <button onClick={() => setIsReminderModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-xl transition-all"><X size={20} strokeWidth={2.5}/></button>
+            </div>
+            <div className="p-6 space-y-6">
+                <div className="space-y-4">
+                    {/* Browser Notification Status */}
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Status Notifikasi Browser</span>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                notificationPermission === 'granted' 
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                                    : notificationPermission === 'denied'
+                                    ? 'bg-red-50 text-red-700 border border-red-100'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-100'
+                            }`}>
+                                {notificationPermission === 'granted' ? 'Aktif' : notificationPermission === 'denied' ? 'Ditolak' : 'Belum Aktif'}
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                            Mengirim pengingat langsung ke sistem operasi/browser Anda saat masa pakai komponen hampir habis.
+                        </p>
+                        {notificationPermission !== 'granted' ? (
+                            <button onClick={requestNotificationPermission} className={`w-full py-2.5 ${theme.bgBase} ${theme.bgHover} text-white font-bold rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 mt-1`}>
+                                Aktifkan Notifikasi
+                            </button>
+                        ) : (
+                            <button onClick={() => checkAndNotifyService(true)} className="w-full py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95 mt-1">
+                                Kirim Tes Notifikasi
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Notification threshold selection */}
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Ambang Batas Pengingat</label>
+                        <select value={reminderThreshold} onChange={e => setReminderThreshold(parseInt(e.target.value))} className={`w-full px-4 py-3 bg-white border border-slate-200 ${theme.borderFocus} shadow-sm rounded-xl text-sm font-semibold ${theme.ringFocus} outline-none text-slate-800 transition-all duration-300`}>
+                            <option value="200">200 KM Sebelum Jatuh Tempo</option>
+                            <option value="500">500 KM Sebelum Jatuh Tempo</option>
+                            <option value="1000">1000 KM Sebelum Jatuh Tempo</option>
+                        </select>
+                        <p className="text-[10px] text-slate-400 px-1 italic">
+                            Anda akan menerima notifikasi/toast ketika sisa umur komponen berada di bawah jarak ini.
+                        </p>
+                    </div>
+                </div>
+
+                <button onClick={() => { checkAndNotifyService(true); setIsReminderModalOpen(false); }} className={`w-full ${theme.bgBase} ${theme.bgHover} text-white font-bold py-3.5 rounded-xl shadow-lg ${theme.shadowHover} active:scale-95 transition-all duration-300 text-xs uppercase tracking-wider`}>
+                    Periksa & Simpan Pengaturan
+                </button>
             </div>
         </div>
       </div>
