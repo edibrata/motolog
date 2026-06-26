@@ -847,25 +847,25 @@ export default function App() {
 
       <div {...swipeHandlers} className="max-w-md mx-auto px-4 pt-8 md:max-w-4xl relative z-10 w-full overflow-hidden touch-pan-y">
         {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-                <div className={`p-2.5 ${theme.bgBase} text-white rounded-[14px] shadow-md`}>
-                    <Wrench className="w-6 h-6" strokeWidth={2.5} />
+        <header className="flex flex-row items-center justify-between gap-2 mb-8">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className={`p-2 sm:p-2.5 ${theme.bgBase} text-white rounded-[12px] sm:rounded-[14px] shadow-md shrink-0`}>
+                    <Wrench className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.5} />
                 </div>
-                <div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">MotoJournal</h1>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Log Servis Kendaraan</p>
+                <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">MotoJournal</h1>
+                    <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">Log Servis Kendaraan</p>
                 </div>
             </div>
-            <div className="flex gap-2.5 items-center">
-                <button onClick={() => setIsCloudModalOpen(true)} title="Sinkronisasi & Backup" className={`bg-white border text-center border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm relative group flex items-center justify-center`}>
-                    <RefreshCw className={`w-5 h-5 ${isSyncing ? `animate-spin ${theme.text}` : ''}`} strokeWidth={2.5}/>
+            <div className="flex gap-1.5 sm:gap-2.5 items-center shrink-0">
+                <button onClick={() => setIsCloudModalOpen(true)} title="Sinkronisasi & Backup" className={`bg-white border text-center border-slate-200 text-slate-500 p-2 sm:p-3 rounded-[12px] sm:rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm relative group flex items-center justify-center`}>
+                    <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isSyncing ? `animate-spin ${theme.text}` : ''}`} strokeWidth={2.5}/>
                 </button>
-                <button onClick={() => setIsVehicleModalOpen(true)} title="Daftar Kendaraan" className={`bg-white border border-slate-200 text-slate-500 p-3 rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm flex items-center justify-center`}>
-                    <Grid className="w-5 h-5" strokeWidth={2.5} />
+                <button onClick={() => setIsVehicleModalOpen(true)} title="Daftar Kendaraan" className={`bg-white border border-slate-200 text-slate-500 p-2 sm:p-3 rounded-[12px] sm:rounded-[14px] hover:bg-slate-50 hover:${theme.text} active:scale-95 transition-all shadow-sm flex items-center justify-center`}>
+                    <Grid className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                 </button>
-                <button onClick={openAddServiceModal} title="Entri Servis Baru" className={`${theme.bgBase} text-white p-3 rounded-[14px] shadow-lg ${theme.shadowLg} ${theme.bgHover} hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center`}>
-                    <Plus className="w-5 h-5" strokeWidth={3} />
+                <button onClick={openAddServiceModal} title="Entri Servis Baru" className={`${theme.bgBase} text-white p-2 sm:p-3 rounded-[12px] sm:rounded-[14px] shadow-lg ${theme.shadowLg} ${theme.bgHover} hover:shadow-xl hover:-translate-y-0.5 active:scale-95 transition-all flex items-center justify-center`}>
+                    <Plus className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={3} />
                 </button>
             </div>
         </header>
@@ -1100,11 +1100,11 @@ export default function App() {
                 className="space-y-5"
               >
               <div className="flex flex-col gap-5 mb-2">
-                  <div className="flex items-center justify-between px-1">
-                      <h2 className="font-black text-slate-900 text-2xl tracking-tight">Catatan <span className={`${theme.text}`}>{activeVehicle?.name}</span></h2>
-                      <div className="flex items-center gap-4">
-                          <button onClick={downloadPDFReport} className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Unduh PDF</button>
-                          <button onClick={handleClearHistory} className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Kosongkan</button>
+                  <div className="flex flex-row items-center justify-between px-1 gap-2">
+                      <h2 className="font-black text-slate-900 text-lg sm:text-2xl tracking-tight leading-tight truncate">Catatan <span className={`${theme.text}`}>{activeVehicle?.name}</span></h2>
+                      <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+                          <button onClick={downloadPDFReport} className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-700 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Unduh PDF</button>
+                          <button onClick={handleClearHistory} className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-600 hover:underline hover:underline-offset-2 active:scale-95 transition-all">Kosongkan</button>
                       </div>
                   </div>
                   
