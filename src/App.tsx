@@ -972,9 +972,9 @@ export default function App() {
                             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Rincian Item & Jasa</p>
                             <div className="space-y-1">
                                  {record.items.map((i, idx) => {
-                                    const highlight = historySearchQuery && i.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ? `${theme.bgLight} ${theme.textLight} rounded px-1 -mx-1` : 'text-slate-700';
+                                    const highlight = historySearchQuery && i.name.toLowerCase().includes(historySearchQuery.toLowerCase()) ? `${theme.bgLight} ${theme.textLight} rounded px-1` : 'text-slate-700';
                                     return (
-                                    <div key={idx} className="flex justify-between items-center py-1 text-xs font-semibold border-b border-slate-200/50 last:border-0 hover:bg-slate-100 transition-colors px-1.5 -mx-1.5 rounded">
+                                    <div key={idx} className="flex justify-between items-center py-1 text-xs font-semibold border-b border-slate-200/50 last:border-0 hover:bg-slate-100 transition-colors px-1 rounded">
                                         <div className="flex items-center gap-1.5 min-w-0">
                                             <span className={`text-[7px] px-1 py-0.5 rounded uppercase font-bold tracking-widest shrink-0 ${i.type === 'jasa' ? `${theme.bgLight} ${theme.text}` : 'bg-slate-200 text-slate-500'}`}>{i.type || 'PART'}</span>
                                             <span className={`truncate ${highlight}`}>{i.name}</span>
@@ -1064,7 +1064,7 @@ export default function App() {
         </header>
 
         {/* Vehicle Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-3 mb-3.5 custom-scroll no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3.5 custom-scroll no-scrollbar w-full">
           {vehicles.map(v => (
             <button key={v.id} onClick={() => setCurrentVehicleId(v.id)} className={`px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${v.id === currentVehicleId ? `${getThemeClasses(v.themeColor).bgBase} text-white shadow-md ring-2 ring-slate-800/20 ring-offset-2 ring-offset-slate-50` : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-sm'}`}>
               {v.photoUrl && <img src={v.photoUrl} alt={v.name} className="w-5 h-5 rounded-full object-cover border border-white/20 shadow-sm" />}
