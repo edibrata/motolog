@@ -1006,7 +1006,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen pb-24 bg-slate-50 text-slate-900 relative overflow-x-hidden font-sans">
+    <div className="min-h-screen pb-24 bg-slate-50 text-slate-900 relative overflow-x-hidden w-full max-w-full font-sans">
       <div id="toastContainer" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 text-center pointer-events-none">
         {toasts.map(t => (
           <div key={t.id} className={`${t.type === 'success' ? 'bg-slate-800' : 'bg-red-600'} text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 toast-enter border border-slate-700 mx-auto pointer-events-auto`}>
@@ -1170,7 +1170,7 @@ export default function App() {
                 className="space-y-5"
               >
               {expenseData.length > 0 && (
-                <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6">
+                <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6 overflow-hidden">
                   <h2 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Grafik Pengeluaran</h2>
                   <div className="h-44 w-full">
                     <ResponsiveContainer width="100%" height="100%">
@@ -1199,7 +1199,7 @@ export default function App() {
               )}
 
               {odometerData.length > 1 && (
-                <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6">
+                <div className="bg-white border border-slate-200 p-5 rounded-[24px] shadow-sm mb-6 overflow-hidden">
                   <h2 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Tren Odometer</h2>
                   <div className="h-44 w-full">
                     <ResponsiveContainer width="100%" height="100%">
