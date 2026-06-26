@@ -113,6 +113,7 @@ export default function App() {
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [activeImagePreview, setActiveImagePreview] = useState<string | null>(null);
 
   // Confirm Dialog state
   const [confirmDialog, setConfirmDialog] = useState({
@@ -986,10 +987,10 @@ export default function App() {
                         </div>
                         {record.attachmentUrl && (
                             <div className="bg-slate-50 rounded-2xl px-5 py-3 border border-slate-100">
-                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Lampiran Bukti</p>
-                                <a href={record.attachmentUrl} target="_blank" rel="noopener noreferrer" className="block w-full max-h-40 overflow-hidden rounded-xl border border-slate-200 hover:opacity-90 transition-opacity">
+                                <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">Lampiran Bukti (Klik untuk perbesar)</p>
+                                <button type="button" onClick={() => setActiveImagePreview(record.attachmentUrl)} className="block w-full max-h-40 overflow-hidden rounded-xl border border-slate-200 hover:opacity-90 transition-opacity cursor-zoom-in text-left">
                                     <img src={record.attachmentUrl} alt="Bukti Servis" className="w-full object-cover" />
-                                </a>
+                                </button>
                             </div>
                         )}
                         <div className="flex gap-3 mt-1">
@@ -1006,12 +1007,29 @@ export default function App() {
 
   return (
     <div className="min-h-screen pb-24 bg-slate-50 text-slate-900 relative overflow-x-hidden font-sans">
-      <div id="toastContainer" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-xs px-4 text-center pointer-events-none">
+      <div id="toastContainer" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 text-center pointer-events-none">
         {toasts.map(t => (
           <div key={t.id} className={`${t.type === 'success' ? 'bg-slate-800' : 'bg-red-600'} text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 toast-enter border border-slate-700 mx-auto pointer-events-auto`}>
             <span className="text-sm font-bold tracking-wide">{t.message}</span>
           </div>
         ))}
+      </div>
+
+      {/* Lightbox / Image Preview Modal */}
+      <div className={`fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[110] flex items-center justify-center p-4 transition-all duration-300 ${activeImagePreview ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+          <button onClick={() => setActiveImagePreview(null)} className="absolute top-4 right-4 bg-white/10 hover:bg-white/25 text-white p-3 rounded-full transition-all active:scale-90 z-[120]">
+              <X size={24} strokeWidth={2.5} />
+          </button>
+          <div className="relative max-w-full max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              {activeImagePreview && (
+                  <img src={activeImagePreview} alt="Pratinjau Bukti Servis" className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/10 animate-in zoom-in-95 duration-200" />
+              )}
+          </div>
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/60 text-xs font-bold tracking-wider uppercase pointer-events-none">
+              Klik di mana saja untuk menutup
+          </div>
+          {/* Click background to close */}
+          <div className="absolute inset-0 -z-10 cursor-zoom-out" onClick={() => setActiveImagePreview(null)}></div>
       </div>
 
       <div {...swipeHandlers} className="max-w-md mx-auto px-4 pt-8 md:max-w-4xl relative z-10 w-full overflow-hidden touch-pan-y">

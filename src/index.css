@@ -29,8 +29,8 @@ body {
 }
 
 @keyframes slideUp {
-    from { transform: translate(-50%, 100%); opacity: 0; }
-    to { transform: translate(-50%, 0); opacity: 1; }
+    from { transform: translateY(1rem); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 .toast-enter {
     animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
